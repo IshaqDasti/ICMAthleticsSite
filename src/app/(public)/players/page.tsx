@@ -28,7 +28,10 @@ export default async function PlayersPage() {
         displayName: p.displayName,
         slug: p.slug,
         jerseyNumber: p.jerseyNumber ?? null,
-        team: p.team ?? null,
+        photoUrl: p.photoUrl ?? null,
+        team: p.team
+          ? { id: p.team.id, name: p.team.name, slug: p.team.slug }
+          : null,
       },
       gamesPlayed: 0,
       totalPoints: 0,
