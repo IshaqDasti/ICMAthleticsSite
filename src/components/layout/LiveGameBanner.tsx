@@ -17,12 +17,23 @@ export function LiveGameBanner() {
 
   useEffect(() => {
     let mounted = true;
+    let poll: ReturnType<typeof setInterval> | null = null;
 
     async function fetchLiveGames() {
       const res = await fetch("/api/games?isLive=true&limit=3");
       if (res.ok) {
         const data = await res.json();
-        if (mounted) setLiveGames(data.games ?? []);
+        if (mounted) {
+          const games: LiveGame[] = data.games ?? [];
+          setLiveGames(games);
+
+          if (games.length > 0 && !poll) {
+            poll = setInterval(fetchLiveGames, 10_000);
+          } else if (games.length === 0 && poll) {
+            clearInterval(poll);
+            poll = null;
+          }
+        }
       }
     }
 
@@ -33,26 +44,14 @@ export function LiveGameBanner() {
       .channel("live-games-banner")
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "games", filter: "is_live=eq.true" },
-        (payload) => {
-          setLiveGames((prev) =>
-            prev.map((g) =>
-              g.id === payload.new.id
-                ? { ...g, homeScore: payload.new.home_score, awayScore: payload.new.away_score }
-                : g
-            )
-          );
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "games" },
+        { event: "*", schema: "public", table: "games" },
         () => fetchLiveGames()
       )
       .subscribe();
 
     return () => {
       mounted = false;
+      if (poll) clearInterval(poll);
       supabase.removeChannel(channel);
     };
   }, []);

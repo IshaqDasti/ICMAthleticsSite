@@ -120,7 +120,7 @@ export function GameCard({ game, isUpcomingWeek = true }: GameCardProps) {
         {(game.scheduledAt || game.location) && (
           <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
             <span>{formatGameDate(game.scheduledAt)}</span>
-            {!isCompleted && !game.isLive && game.scheduledAt && (
+            {game.scheduledAt && (
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3" />
                 {formatGameTime(game.scheduledAt)}

@@ -16,7 +16,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export const POST = withAuth(async (req, user, { params }) => {
   const body = await req.json();
-  const { type, playerId, teamId, isHome, quarter } = body;
+  const { type, playerId, teamId, isHome, quarter, value } = body;
 
   const [event, playerStat, teamStat, game] = await applyGameEvent({
     gameId: params.id,
@@ -25,7 +25,7 @@ export const POST = withAuth(async (req, user, { params }) => {
     teamId,
     isHome,
     quarter,
-    value: 1,
+    value: typeof value === "number" ? value : 1,
     createdBy: user.id,
   });
 

@@ -1,12 +1,17 @@
-import { format, parseISO, isValid } from "date-fns";
+import { parseISO, isValid } from "date-fns";
+
+const etDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "America/New_York",
+});
 
 export function formatGameDate(date: Date | string | null): string {
   if (!date) return "TBD";
   const d = typeof date === "string" ? parseISO(date) : date;
   if (!isValid(d)) return "TBD";
-  // Use UTC components to prevent timezone offset from shifting midnight-UTC dates back one day
-  const local = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  return format(local, "MMM d, yyyy");
+  return etDateFormatter.format(d);
 }
 
 const edtTimeFormatter = new Intl.DateTimeFormat("en-US", {

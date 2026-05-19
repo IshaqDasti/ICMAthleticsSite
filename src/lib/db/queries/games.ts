@@ -104,7 +104,7 @@ export async function getRecentGames(seasonId: string, limit = 5) {
 
 export async function getUpcomingGames(seasonId: string, limit = 5) {
   return prisma.game.findMany({
-    where: { seasonId, status: "SCHEDULED" },
+    where: { seasonId, status: { in: ["SCHEDULED", "IN_PROGRESS"] } },
     include: {
       homeTeam: { select: { id: true, name: true, slug: true, logoUrl: true } },
       awayTeam: { select: { id: true, name: true, slug: true, logoUrl: true } },

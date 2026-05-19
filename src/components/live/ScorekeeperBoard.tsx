@@ -35,6 +35,13 @@ interface GameEvent {
   quarter: number;
   playerName?: string;
   teamName?: string;
+  value: number;
+}
+
+interface PlayerStat {
+  points: number;
+  rebounds: number;
+  assists: number;
 }
 
 interface Props {
@@ -42,12 +49,6 @@ interface Props {
 }
 
 type EventType = "POINT" | "REBOUND" | "ASSIST";
-
-const STAT_BUTTONS: Array<{ type: EventType; label: string; color: string }> = [
-  { type: "POINT", label: "+1 PTS", color: "bg-blue-600 hover:bg-blue-700 active:bg-blue-800" },
-  { type: "REBOUND", label: "+1 REB", color: "bg-green-600 hover:bg-green-700 active:bg-green-800" },
-  { type: "ASSIST", label: "+1 AST", color: "bg-amber-600 hover:bg-amber-700 active:bg-amber-800" },
-];
 
 export function ScorekeeperBoard({ initialGame }: Props) {
   const [game, setGame] = useState(initialGame);
@@ -57,8 +58,24 @@ export function ScorekeeperBoard({ initialGame }: Props) {
   const [loading, setLoading] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
+  const [playerStats, setPlayerStats] = useState<Record<string, PlayerStat>>({});
 
   const selectedTeam = game.homeTeam.id === selectedTeamId ? game.homeTeam : game.awayTeam;
+
+  const fetchStats = useCallback(async () => {
+    const res = await fetch(`/api/games/${game.id}/stats`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const map: Record<string, PlayerStat> = {};
+    for (const s of data.stats) {
+      map[s.playerId] = { points: s.points, rebounds: s.rebounds, assists: s.assists };
+    }
+    setPlayerStats(map);
+  }, [game.id]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -106,16 +123,16 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     setIsEnding(false);
   }
 
-  async function handleAdvanceQuarter() {
+  async function handleStartSecondHalf() {
     const res = await fetch(`/api/games/${game.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentQuarter: game.currentQuarter + 1 }),
+      body: JSON.stringify({ currentQuarter: 2 }),
     });
-    if (!res.ok) toast.error("Failed to advance quarter");
+    if (!res.ok) toast.error("Failed to start 2nd half");
   }
 
-  async function handleStatEvent(type: EventType) {
+  async function handleStatEvent(type: EventType, value: number) {
     if (!selectedPlayerId) {
       toast.warning("Select a player first");
       return;
@@ -128,14 +145,27 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     setLoading(true);
     const isHome = selectedTeamId === game.homeTeam.id;
 
-    // Optimistic UI
+    // Optimistic score update
     if (type === "POINT") {
       setGame((prev) => ({
         ...prev,
-        homeScore: isHome ? prev.homeScore + 1 : prev.homeScore,
-        awayScore: !isHome ? prev.awayScore + 1 : prev.awayScore,
+        homeScore: isHome ? prev.homeScore + value : prev.homeScore,
+        awayScore: !isHome ? prev.awayScore + value : prev.awayScore,
       }));
     }
+
+    // Optimistic player stats update
+    setPlayerStats((prev) => {
+      const cur = prev[selectedPlayerId] ?? { points: 0, rebounds: 0, assists: 0 };
+      return {
+        ...prev,
+        [selectedPlayerId]: {
+          points: type === "POINT" ? cur.points + value : cur.points,
+          rebounds: type === "REBOUND" ? cur.rebounds + value : cur.rebounds,
+          assists: type === "ASSIST" ? cur.assists + value : cur.assists,
+        },
+      };
+    });
 
     const res = await fetch(`/api/games/${game.id}/events`, {
       method: "POST",
@@ -146,18 +176,31 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         teamId: selectedTeamId,
         isHome,
         quarter: game.currentQuarter,
+        value,
       }),
     });
 
     if (!res.ok) {
-      // Rollback
+      // Rollback score
       if (type === "POINT") {
         setGame((prev) => ({
           ...prev,
-          homeScore: isHome ? prev.homeScore - 1 : prev.homeScore,
-          awayScore: !isHome ? prev.awayScore - 1 : prev.awayScore,
+          homeScore: isHome ? prev.homeScore - value : prev.homeScore,
+          awayScore: !isHome ? prev.awayScore - value : prev.awayScore,
         }));
       }
+      // Rollback player stats
+      setPlayerStats((prev) => {
+        const cur = prev[selectedPlayerId] ?? { points: 0, rebounds: 0, assists: 0 };
+        return {
+          ...prev,
+          [selectedPlayerId]: {
+            points: type === "POINT" ? cur.points - value : cur.points,
+            rebounds: type === "REBOUND" ? cur.rebounds - value : cur.rebounds,
+            assists: type === "ASSIST" ? cur.assists - value : cur.assists,
+          },
+        };
+      });
       toast.error("Failed to record stat");
     } else {
       const data = await res.json();
@@ -170,6 +213,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         quarter: game.currentQuarter,
         playerName,
         teamName: selectedTeam.name,
+        value,
       });
     }
     setLoading(false);
@@ -186,16 +230,19 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     } else {
       toast.success("Action undone");
       setLastEvent(null);
+      fetchStats();
     }
     setLoading(false);
   }
+
+  const canRecord = !loading && !!selectedPlayerId && game.isLive;
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
       {/* Score Display */}
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-muted-foreground">Q{game.currentQuarter}</span>
+          <span className="text-xs text-muted-foreground">{game.currentQuarter === 1 ? "1st Half" : "2nd Half"}</span>
           {game.isLive ? (
             <span className="flex items-center gap-1 text-xs font-bold text-red-600">
               <span className="live-dot w-1.5 h-1.5 rounded-full bg-red-600" />
@@ -229,13 +276,15 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         </button>
       ) : (
         <div className="flex gap-2">
-          <button
-            onClick={handleAdvanceQuarter}
-            className="flex-1 py-2.5 border rounded-lg text-sm font-medium hover:bg-muted flex items-center justify-center gap-1"
-          >
-            <ChevronRight className="w-4 h-4" />
-            Q{game.currentQuarter + 1}
-          </button>
+          {game.currentQuarter === 1 && (
+            <button
+              onClick={handleStartSecondHalf}
+              className="flex-1 py-2.5 border rounded-lg text-sm font-medium hover:bg-muted flex items-center justify-center gap-1"
+            >
+              <ChevronRight className="w-4 h-4" />
+              Start 2nd Half
+            </button>
+          )}
           <button
             onClick={handleEndGame}
             disabled={isEnding}
@@ -271,41 +320,99 @@ export function ScorekeeperBoard({ initialGame }: Props) {
           Select Player
         </p>
         <div className="grid grid-cols-2 gap-1 p-2">
-          {selectedTeam.players.map((player) => (
+          {selectedTeam.players.map((player) => {
+            const stats = playerStats[player.id];
+            const isSelected = selectedPlayerId === player.id;
+            return (
+              <button
+                key={player.id}
+                onClick={() => setSelectedPlayerId(player.id === selectedPlayerId ? null : player.id)}
+                className={cn(
+                  "px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left",
+                  isSelected
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/50 hover:bg-muted text-foreground"
+                )}
+              >
+                <div>
+                  {player.jerseyNumber !== null && (
+                    <span className="text-xs opacity-60 mr-1">#{player.jerseyNumber}</span>
+                  )}
+                  {player.displayName}
+                </div>
+                <div className={cn("text-xs mt-0.5 font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
+                  {stats
+                    ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A`
+                    : "0P · 0R · 0A"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Points Buttons */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Points</p>
+        <div className="grid grid-cols-3 gap-2">
+          {[1, 2, 3].map((pts) => (
             <button
-              key={player.id}
-              onClick={() => setSelectedPlayerId(player.id === selectedPlayerId ? null : player.id)}
-              className={cn(
-                "px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left",
-                selectedPlayerId === player.id
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted/50 hover:bg-muted text-foreground"
-              )}
+              key={pts}
+              onClick={() => handleStatEvent("POINT", pts)}
+              disabled={!canRecord}
+              className="py-5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-lg transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
             >
-              {player.jerseyNumber !== null && (
-                <span className="text-xs opacity-60 mr-1">#{player.jerseyNumber}</span>
-              )}
-              {player.displayName}
+              +{pts} PTS
             </button>
           ))}
         </div>
       </div>
 
-      {/* Stat Buttons */}
-      <div className="grid grid-cols-3 gap-3">
-        {STAT_BUTTONS.map(({ type, label, color }) => (
+      {/* Rebound & Assist Buttons */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Other Stats</p>
+        <div className="grid grid-cols-2 gap-2">
           <button
-            key={type}
-            onClick={() => handleStatEvent(type)}
-            disabled={loading || !selectedPlayerId || !game.isLive}
-            className={cn(
-              "py-6 rounded-xl text-white font-bold text-lg transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm",
-              color
-            )}
+            onClick={() => handleStatEvent("REBOUND", 1)}
+            disabled={!canRecord}
+            className="py-5 rounded-xl bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-lg transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
           >
-            {label}
+            +1 REB
           </button>
-        ))}
+          <button
+            onClick={() => handleStatEvent("ASSIST", 1)}
+            disabled={!canRecord}
+            className="py-5 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-lg transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+          >
+            +1 AST
+          </button>
+        </div>
+      </div>
+
+      {/* Deduct Buttons */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Deduct</p>
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              { type: "POINT" as EventType, label: "−1 PTS", cls: "border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40" },
+              { type: "REBOUND" as EventType, label: "−1 REB", cls: "border-green-400 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/40" },
+              { type: "ASSIST" as EventType, label: "−1 AST", cls: "border-amber-400 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40" },
+            ] as const
+          ).map(({ type, label, cls }) => (
+            <button
+              key={type}
+              onClick={() => handleStatEvent(type, -1)}
+              disabled={!canRecord}
+              className={cn(
+                "py-3 rounded-xl border font-bold text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed",
+                cls
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Undo */}
@@ -316,7 +423,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
           className="w-full py-3 border rounded-xl text-sm font-medium hover:bg-muted flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
         >
           <RotateCcw className="w-4 h-4" />
-          Undo: {lastEvent.eventType} — {lastEvent.playerName}
+          Undo: {lastEvent.value > 0 ? "+" : "−"}{Math.abs(lastEvent.value)} {lastEvent.eventType} — {lastEvent.playerName}
         </button>
       )}
     </div>

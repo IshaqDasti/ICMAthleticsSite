@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { getActiveSeason } from "@/lib/db/queries/seasons";
 import { getGames } from "@/lib/db/queries/games";
 import { GameCard } from "@/components/schedule/GameCard";
+import { ScheduleRefresher } from "@/components/schedule/ScheduleRefresher";
 import { prisma } from "@/lib/db/client";
 
 export const metadata: Metadata = { title: "Schedule" };
@@ -37,11 +38,13 @@ export default async function SchedulePage({
   const oneHourMs = 60 * 60 * 1000;
   // Find the minimum weekNumber of SCHEDULED games that haven't expired (start + 1hr > now)
   const upcomingWeekNumber = games.reduce<number | null>((min, game) => {
-    if (game.status !== "SCHEDULED" || game.weekNumber === null) return min;
+    if ((game.status !== "SCHEDULED" && game.status !== "IN_PROGRESS") || game.weekNumber === null) return min;
     const start = game.scheduledAt ? new Date(game.scheduledAt as Date).getTime() : Infinity;
     if (start + oneHourMs <= now.getTime()) return min;
     return min === null || game.weekNumber < min ? game.weekNumber : min;
   }, null);
+
+  const hasLiveGames = games.some((g) => g.isLive);
 
   const grouped = games.reduce<Record<string, typeof games>>((acc, game) => {
     const key = game.weekNumber ? `Week ${game.weekNumber}` : game.gameType.replace(/_/g, " ");
@@ -52,6 +55,7 @@ export default async function SchedulePage({
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <ScheduleRefresher hasLiveGames={hasLiveGames} />
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Schedule</h1>
         <p className="text-muted-foreground mt-1">{season.name}</p>
@@ -91,14 +95,12 @@ export default async function SchedulePage({
                 {week}
                 <span className="text-sm font-normal text-muted-foreground">
                   · {weekGames[0]?.scheduledAt
-                    ? (() => {
-                        const d = new Date(weekGames[0].scheduledAt!);
-                        return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        });
-                      })()
+                    ? new Date(weekGames[0].scheduledAt as Date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        timeZone: "America/New_York",
+                      })
                     : ""}
                 </span>
               </h2>

@@ -54,40 +54,45 @@ export function BoxScoreView({ game: initialGame, homeStats: initialHome, awaySt
   useEffect(() => {
     if (!game.isLive) return;
 
+    async function fetchBoxScore() {
+      const res = await fetch(`/api/games/${game.id}/boxscore`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setGame((prev) => ({
+        ...prev,
+        homeScore: data.game.homeScore,
+        awayScore: data.game.awayScore,
+        currentQuarter: data.game.currentQuarter,
+        isLive: data.game.isLive,
+        status: data.game.status,
+        homeQuarterScores: data.game.homeQuarterScores ?? prev.homeQuarterScores,
+        awayQuarterScores: data.game.awayQuarterScores ?? prev.awayQuarterScores,
+      }));
+      setHomeStats(data.homeStats);
+      setAwayStats(data.awayStats);
+    }
+
     const supabase = createClient();
     const channel = supabase
       .channel(`game-boxscore-${game.id}`)
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "games", filter: `id=eq.${game.id}` },
-        (payload) => {
-          setGame((prev) => ({
-            ...prev,
-            homeScore: payload.new.home_score,
-            awayScore: payload.new.away_score,
-            currentQuarter: payload.new.current_quarter,
-            isLive: payload.new.is_live,
-            status: payload.new.status,
-            homeQuarterScores: payload.new.home_quarter_scores ?? prev.homeQuarterScores,
-            awayQuarterScores: payload.new.away_quarter_scores ?? prev.awayQuarterScores,
-          }));
-        }
+        { event: "*", schema: "public", table: "games", filter: `id=eq.${game.id}` },
+        () => fetchBoxScore()
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "player_game_stats", filter: `game_id=eq.${game.id}` },
-        async () => {
-          const res = await fetch(`/api/games/${game.id}/boxscore`);
-          if (res.ok) {
-            const data = await res.json();
-            setHomeStats(data.homeStats);
-            setAwayStats(data.awayStats);
-          }
-        }
+        () => fetchBoxScore()
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    const poll = setInterval(fetchBoxScore, 10_000);
+
+    return () => {
+      clearInterval(poll);
+      supabase.removeChannel(channel);
+    };
   }, [game.id, game.isLive]);
 
   return (
