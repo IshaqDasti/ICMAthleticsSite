@@ -9,7 +9,7 @@ import { formatWinPct } from "@/lib/utils/stats";
 import { formatStreak } from "@/lib/utils/standings";
 import { ArrowRight, Trophy, Megaphone } from "lucide-react";
 
-export const revalidate = 10;
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const season = await getActiveSeason();

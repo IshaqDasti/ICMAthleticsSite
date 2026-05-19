@@ -4,7 +4,7 @@ import { getStandings } from "@/lib/db/queries/standings";
 import { StandingsTable } from "@/components/standings/StandingsTable";
 
 export const metadata: Metadata = { title: "Standings" };
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export default async function StandingsPage() {
   const season = await getActiveSeason();

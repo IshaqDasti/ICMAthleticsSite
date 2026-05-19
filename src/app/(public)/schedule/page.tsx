@@ -5,7 +5,7 @@ import { GameCard } from "@/components/schedule/GameCard";
 import { prisma } from "@/lib/db/client";
 
 export const metadata: Metadata = { title: "Schedule" };
-export const revalidate = 10;
+export const dynamic = "force-dynamic";
 
 export default async function SchedulePage({
   searchParams,

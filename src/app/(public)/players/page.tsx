@@ -4,7 +4,7 @@ import { getLeagueLeaders, getPlayers } from "@/lib/db/queries/players";
 import { PlayerRankingsTable } from "@/components/players/PlayerRankingsTable";
 
 export const metadata: Metadata = { title: "Player Rankings" };
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export default async function PlayersPage() {
   const season = await getActiveSeason();
