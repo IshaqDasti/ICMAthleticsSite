@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
 import { getBoxScore } from "@/lib/db/queries/games";
 import { withAuth } from "@/lib/auth/withAuth";
