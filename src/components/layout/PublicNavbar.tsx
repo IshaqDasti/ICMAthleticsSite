@@ -14,6 +14,7 @@ const navLinks = [
   { href: "/schedule", label: "Schedule" },
   { href: "/players", label: "Players" },
   { href: "/teams", label: "Teams" },
+  { href: "/about", label: "About" },
 ];
 
 export function PublicNavbar() {

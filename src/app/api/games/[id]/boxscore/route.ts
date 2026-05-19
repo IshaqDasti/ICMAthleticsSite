@@ -5,6 +5,7 @@ import { getBoxScore } from "@/lib/db/queries/games";
 import { withAuth } from "@/lib/auth/withAuth";
 import { prisma } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
+import { finalizeGame } from "@/lib/db/mutations/standings";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const data = await getBoxScore(params.id);
@@ -29,6 +30,12 @@ export const PUT = withAuth(async (req, _user, { params }) => {
     awayScore?: number;
   };
 
+  const scoresProvided = homeScore !== undefined || awayScore !== undefined;
+
+  const prevGame = scoresProvided
+    ? await prisma.game.findUnique({ where: { id: params.id }, select: { status: true } })
+    : null;
+
   await prisma.$transaction([
     ...playerStats.map((s) =>
       prisma.playerGameStats.upsert({
@@ -50,7 +57,7 @@ export const PUT = withAuth(async (req, _user, { params }) => {
         },
       })
     ),
-    ...(homeScore !== undefined || awayScore !== undefined
+    ...(scoresProvided
       ? [
           prisma.game.update({
             where: { id: params.id },
@@ -65,8 +72,13 @@ export const PUT = withAuth(async (req, _user, { params }) => {
       : []),
   ]);
 
+  if (scoresProvided && prevGame?.status !== "COMPLETED") {
+    await finalizeGame(params.id);
+  }
+
   revalidatePath("/schedule");
   revalidatePath("/");
+  revalidatePath("/standings");
   revalidatePath("/teams", "layout");
   revalidatePath(`/games/${params.id}`);
 

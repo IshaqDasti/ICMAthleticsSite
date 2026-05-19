@@ -86,6 +86,7 @@ export function BoxScoreEditor({
               type="number"
               min={0}
               value={homeScore}
+              onFocus={(e) => e.target.select()}
               onChange={(e) => setHomeScore(Math.max(0, parseInt(e.target.value) || 0))}
               className="w-full px-3 py-2 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
@@ -97,6 +98,7 @@ export function BoxScoreEditor({
               type="number"
               min={0}
               value={awayScore}
+              onFocus={(e) => e.target.select()}
               onChange={(e) => setAwayScore(Math.max(0, parseInt(e.target.value) || 0))}
               className="w-full px-3 py-2 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
@@ -104,68 +106,71 @@ export function BoxScoreEditor({
         </div>
       </div>
 
-      {/* Player stats tables */}
-      {[
-        { team: homeTeam, teamRows: homeRows },
-        { team: awayTeam, teamRows: awayRows },
-      ].map(({ team, teamRows }) => (
-        <div key={team.id} className="rounded-xl border bg-card overflow-hidden">
-          <div className="px-4 py-3 border-b bg-muted/30">
-            <h2 className="font-semibold">{team.name}</h2>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="text-xs text-muted-foreground bg-muted/20">
-              <tr>
-                <th className="px-4 py-2 text-left">Player</th>
-                <th className="px-4 py-2 text-center w-20">PTS</th>
-                <th className="px-4 py-2 text-center w-20">REB</th>
-                <th className="px-4 py-2 text-center w-20">AST</th>
-                <th className="px-4 py-2 text-center w-24">Played</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {teamRows.map((row) => (
-                <tr key={row.playerId} className="hover:bg-muted/20">
-                  <td className="px-4 py-2 font-medium">
-                    {row.jerseyNumber !== null && (
-                      <span className="text-xs text-muted-foreground mr-1.5">#{row.jerseyNumber}</span>
-                    )}
-                    {row.displayName}
-                  </td>
-                  {(["points", "rebounds", "assists"] as const).map((field) => (
-                    <td key={field} className="px-4 py-2 text-center">
+      {/* Player stats tables — side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {[
+          { team: homeTeam, teamRows: homeRows },
+          { team: awayTeam, teamRows: awayRows },
+        ].map(({ team, teamRows }) => (
+          <div key={team.id} className="rounded-xl border bg-card overflow-hidden">
+            <div className="px-4 py-3 border-b bg-muted/30">
+              <h2 className="font-semibold">{team.name}</h2>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="text-xs text-muted-foreground bg-muted/20">
+                <tr>
+                  <th className="px-4 py-2 text-left">Player</th>
+                  <th className="px-4 py-2 text-center w-16">PTS</th>
+                  <th className="px-4 py-2 text-center w-16">REB</th>
+                  <th className="px-4 py-2 text-center w-16">AST</th>
+                  <th className="px-4 py-2 text-center w-20">Played</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {teamRows.map((row) => (
+                  <tr key={row.playerId} className="hover:bg-muted/20">
+                    <td className="px-4 py-2 font-medium">
+                      {row.jerseyNumber !== null && (
+                        <span className="text-xs text-muted-foreground mr-1.5">#{row.jerseyNumber}</span>
+                      )}
+                      {row.displayName}
+                    </td>
+                    {(["points", "rebounds", "assists"] as const).map((field) => (
+                      <td key={field} className="px-4 py-2 text-center">
+                        <input
+                          type="number"
+                          min={0}
+                          value={row[field]}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) =>
+                            updateRow(row.playerId, field, Math.max(0, parseInt(e.target.value) || 0))
+                          }
+                          className="w-14 text-center px-2 py-1 rounded border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </td>
+                    ))}
+                    <td className="px-4 py-2 text-center">
                       <input
-                        type="number"
-                        min={0}
-                        value={row[field]}
-                        onChange={(e) =>
-                          updateRow(row.playerId, field, Math.max(0, parseInt(e.target.value) || 0))
-                        }
-                        className="w-16 text-center px-2 py-1 rounded border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        type="checkbox"
+                        checked={row.gamePlayed}
+                        onChange={(e) => updateRow(row.playerId, "gamePlayed", e.target.checked)}
+                        className="w-4 h-4 accent-primary cursor-pointer"
                       />
                     </td>
-                  ))}
-                  <td className="px-4 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      checked={row.gamePlayed}
-                      onChange={(e) => updateRow(row.playerId, "gamePlayed", e.target.checked)}
-                      className="w-4 h-4 accent-primary cursor-pointer"
-                    />
-                  </td>
-                </tr>
-              ))}
-              {teamRows.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground text-sm">
-                    No players on this team yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      ))}
+                  </tr>
+                ))}
+                {teamRows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground text-sm">
+                      No players on this team yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
 
       <button
         onClick={handleSave}
