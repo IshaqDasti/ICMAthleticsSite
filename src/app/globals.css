@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 336 60% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 336 60% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 336 60% 8%;
+    --primary: 336 100% 15%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 337 19% 81%;
+    --secondary-foreground: 336 100% 15%;
+    --muted: 337 19% 93%;
+    --muted-foreground: 337 20% 45%;
+    --accent: 337 19% 81%;
+    --accent-foreground: 336 100% 15%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 337 19% 88%;
+    --input: 337 19% 88%;
+    --ring: 336 100% 15%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 336 60% 6%;
+    --foreground: 337 19% 93%;
+    --card: 336 50% 10%;
+    --card-foreground: 337 19% 93%;
+    --popover: 336 50% 10%;
+    --popover-foreground: 337 19% 93%;
+    --primary: 337 43% 27%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 336 40% 16%;
+    --secondary-foreground: 337 19% 93%;
+    --muted: 336 40% 16%;
+    --muted-foreground: 337 19% 65%;
+    --accent: 336 40% 20%;
+    --accent-foreground: 337 19% 93%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 336 40% 18%;
+    --input: 336 40% 18%;
+    --ring: 337 43% 27%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Live pulse animation */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.live-dot {
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
