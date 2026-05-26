@@ -8,10 +8,20 @@ export async function getStandings(seasonId: string) {
         select: { id: true, name: true, slug: true, logoUrl: true },
       },
     },
-    orderBy: [{ wins: "desc" }, { pointsFor: "desc" }],
   });
 
-  return rows.map((row, index) => ({
+  const sorted = rows.sort((a, b) => {
+    const gamesA = a.wins + a.losses;
+    const gamesB = b.wins + b.losses;
+    const pctA = gamesA > 0 ? a.wins / gamesA : 0;
+    const pctB = gamesB > 0 ? b.wins / gamesB : 0;
+    if (pctB !== pctA) return pctB - pctA;
+    const diffA = a.pointsFor - a.pointsAgainst;
+    const diffB = b.pointsFor - b.pointsAgainst;
+    return diffB - diffA;
+  });
+
+  return sorted.map((row, index) => ({
     rank: index + 1,
     teamId: row.teamId,
     teamName: row.team.name,
