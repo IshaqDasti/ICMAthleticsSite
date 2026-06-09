@@ -16,12 +16,13 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export const POST = withAuth(async (req, user, { params }) => {
   const body = await req.json();
-  const { type, playerId, teamId, isHome, quarter, value } = body;
+  const { type, playerId, substituteStatsId, teamId, isHome, quarter, value } = body;
 
   const [event, playerStat, teamStat, game] = await applyGameEvent({
     gameId: params.id,
     eventType: type,
-    playerId,
+    playerId: playerId ?? null,
+    substituteStatsId: substituteStatsId ?? null,
     teamId,
     isHome,
     quarter,

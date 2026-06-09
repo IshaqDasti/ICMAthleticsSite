@@ -30,16 +30,21 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
 
   if (!game) notFound();
 
-  const existingStats = new Map(game.playerGameStats.map((s) => [s.playerId, s]));
+  const existingStats = new Map(
+    game.playerGameStats.filter((s) => s.playerId !== null).map((s) => [s.playerId!, s])
+  );
 
   const buildRows = (teamId: string, players: typeof game.homeTeam.players) =>
     players.map((p) => {
       const stat = existingStats.get(p.id);
       return {
+        rowKey: p.id,
         playerId: p.id,
+        substituteStatsId: null,
         teamId,
         displayName: p.displayName,
         jerseyNumber: p.jerseyNumber,
+        isSubstitute: false,
         points: stat?.points ?? 0,
         rebounds: stat?.rebounds ?? 0,
         assists: stat?.assists ?? 0,
@@ -47,9 +52,26 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
       };
     });
 
+  const subRows = game.playerGameStats
+    .filter((s) => s.playerId === null && s.substituteName)
+    .map((s) => ({
+      rowKey: s.id,
+      playerId: null,
+      substituteStatsId: s.id,
+      teamId: s.teamId,
+      displayName: s.substituteName!,
+      jerseyNumber: s.substituteJersey ?? null,
+      isSubstitute: true,
+      points: s.points,
+      rebounds: s.rebounds,
+      assists: s.assists,
+      gamePlayed: s.gamePlayed,
+    }));
+
   const initialRows = [
     ...buildRows(game.homeTeamId, game.homeTeam.players),
     ...buildRows(game.awayTeamId, game.awayTeam.players),
+    ...subRows,
   ];
 
   return (

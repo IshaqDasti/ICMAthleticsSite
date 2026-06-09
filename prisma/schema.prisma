@@ -194,17 +194,19 @@ model Game {
 }
 
 model PlayerGameStats {
-  id         String  @id @default(cuid())
-  gameId     String
-  playerId   String
-  teamId     String
-  points     Int     @default(0)
-  rebounds   Int     @default(0)
-  assists    Int     @default(0)
-  gamePlayed Boolean @default(false)
+  id               String  @id @default(cuid())
+  gameId           String
+  playerId         String?
+  teamId           String
+  points           Int     @default(0)
+  rebounds         Int     @default(0)
+  assists          Int     @default(0)
+  gamePlayed       Boolean @default(false)
+  substituteName   String?
+  substituteJersey Int?
 
-  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  game   Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player Player? @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([gameId, playerId])
   @@index([gameId])
@@ -231,18 +233,19 @@ model TeamGameStats {
 }
 
 model GameEvent {
-  id        String    @id @default(cuid())
-  gameId    String
-  eventType EventType
-  playerId  String?
-  teamId    String?
-  value     Int       @default(1)
-  quarter   Int       @default(1)
-  undone    Boolean   @default(false)
-  undoneAt  DateTime?
-  sequence  Int
-  createdBy String?
-  createdAt DateTime  @default(now())
+  id                String    @id @default(cuid())
+  gameId            String
+  eventType         EventType
+  playerId          String?
+  substituteStatsId String?
+  teamId            String?
+  value             Int       @default(1)
+  quarter           Int       @default(1)
+  undone            Boolean   @default(false)
+  undoneAt          DateTime?
+  sequence          Int
+  createdBy         String?
+  createdAt         DateTime  @default(now())
 
   game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
 

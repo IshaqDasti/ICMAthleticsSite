@@ -27,24 +27,26 @@ export async function finalizeGame(gameId: string) {
     return current <= 0 ? current - 1 : -1;
   };
 
-  const careerUpdates = game.playerGameStats.map((s) =>
-    prisma.playerCareerStats.upsert({
-      where: { playerId: s.playerId },
-      create: {
-        playerId: s.playerId,
-        totalPoints: s.points,
-        totalRebounds: s.rebounds,
-        totalAssists: s.assists,
-        gamesPlayed: 1,
-      },
-      update: {
-        totalPoints: { increment: s.points },
-        totalRebounds: { increment: s.rebounds },
-        totalAssists: { increment: s.assists },
-        gamesPlayed: { increment: 1 },
-      },
-    })
-  );
+  const careerUpdates = game.playerGameStats
+    .filter((s) => s.playerId !== null)
+    .map((s) =>
+      prisma.playerCareerStats.upsert({
+        where: { playerId: s.playerId! },
+        create: {
+          playerId: s.playerId!,
+          totalPoints: s.points,
+          totalRebounds: s.rebounds,
+          totalAssists: s.assists,
+          gamesPlayed: 1,
+        },
+        update: {
+          totalPoints: { increment: s.points },
+          totalRebounds: { increment: s.rebounds },
+          totalAssists: { increment: s.assists },
+          gamesPlayed: { increment: 1 },
+        },
+      })
+    );
 
   return prisma.$transaction([
     prisma.teamSeason.update({

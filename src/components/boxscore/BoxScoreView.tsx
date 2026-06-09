@@ -14,13 +14,15 @@ interface PlayerStat {
   rebounds: number;
   assists: number;
   gamePlayed: boolean;
+  substituteName: string | null;
+  substituteJersey: number | null;
   player: {
     id: string;
     displayName: string;
     slug: string;
     jerseyNumber: number | null;
     photoUrl: string | null;
-  };
+  } | null;
 }
 
 interface BoxScoreGame {

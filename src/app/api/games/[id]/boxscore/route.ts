@@ -22,10 +22,19 @@ interface PlayerStatInput {
   gamePlayed: boolean;
 }
 
+interface SubstituteStatInput {
+  substituteStatsId: string;
+  points: number;
+  rebounds: number;
+  assists: number;
+  gamePlayed: boolean;
+}
+
 export const PUT = withAuth(async (req, _user, { params }) => {
   const body = await req.json();
-  const { playerStats, homeScore, awayScore } = body as {
+  const { playerStats, substituteStats, homeScore, awayScore } = body as {
     playerStats: PlayerStatInput[];
+    substituteStats?: SubstituteStatInput[];
     homeScore?: number;
     awayScore?: number;
   };
@@ -50,6 +59,17 @@ export const PUT = withAuth(async (req, _user, { params }) => {
           gamePlayed: s.gamePlayed,
         },
         update: {
+          points: s.points,
+          rebounds: s.rebounds,
+          assists: s.assists,
+          gamePlayed: s.gamePlayed,
+        },
+      })
+    ),
+    ...(substituteStats ?? []).map((s) =>
+      prisma.playerGameStats.update({
+        where: { id: s.substituteStatsId },
+        data: {
           points: s.points,
           rebounds: s.rebounds,
           assists: s.assists,

@@ -73,7 +73,7 @@ export async function getLeagueLeaders(seasonId: string) {
     _count: { gameId: true },
   });
 
-  const playerIds = stats.map((s) => s.playerId);
+  const playerIds = stats.map((s) => s.playerId).filter((id): id is string => id !== null);
   const players = await prisma.player.findMany({
     where: { id: { in: playerIds } },
     select: {
@@ -91,8 +91,9 @@ export async function getLeagueLeaders(seasonId: string) {
   const playerMap = new Map(players.map((p) => [p.id, p]));
 
   return stats
+    .filter((s) => s.playerId !== null)
     .map((s) => ({
-      player: playerMap.get(s.playerId)!,
+      player: playerMap.get(s.playerId!)!,
       gamesPlayed: s._count.gameId,
       totalPoints: s._sum.points ?? 0,
       totalRebounds: s._sum.rebounds ?? 0,

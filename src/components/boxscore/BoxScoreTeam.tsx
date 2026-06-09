@@ -8,13 +8,15 @@ interface PlayerStat {
   rebounds: number;
   assists: number;
   gamePlayed: boolean;
+  substituteName: string | null;
+  substituteJersey: number | null;
   player: {
     id: string;
     displayName: string;
     slug: string;
     jerseyNumber: number | null;
     photoUrl: string | null;
-  };
+  } | null;
 }
 
 interface Props {
@@ -24,7 +26,9 @@ interface Props {
 }
 
 export function BoxScoreTeam({ teamName, stats, isWinner }: Props) {
-  const played = stats.filter((s) => s.gamePlayed);
+  const played = stats
+    .filter((s) => s.gamePlayed)
+    .sort((a, b) => (a.player ? 0 : 1) - (b.player ? 0 : 1));
   const totals = played.reduce(
     (acc, s) => ({
       points: acc.points + s.points,
@@ -60,26 +64,38 @@ export function BoxScoreTeam({ teamName, stats, isWinner }: Props) {
                 </td>
               </tr>
             ) : (
-              played.map((s) => (
-                <tr key={s.id} className="hover:bg-muted/30">
-                  <td className="px-3 py-2">
-                    <Link
-                      href={`/players/${s.player.slug}`}
-                      className="font-medium hover:text-primary transition-colors"
-                    >
-                      {s.player.jerseyNumber !== null && (
-                        <span className="text-muted-foreground mr-1.5 text-xs">
-                          #{s.player.jerseyNumber}
+              played.map((s) => {
+                const displayName = s.player?.displayName ?? s.substituteName ?? "Unknown";
+                const jerseyNumber = s.player?.jerseyNumber ?? s.substituteJersey;
+                return (
+                  <tr key={s.id} className="hover:bg-muted/30">
+                    <td className="px-3 py-2">
+                      {s.player ? (
+                        <Link
+                          href={`/players/${s.player.slug}`}
+                          className="font-medium hover:text-primary transition-colors"
+                        >
+                          {jerseyNumber !== null && (
+                            <span className="text-muted-foreground mr-1.5 text-xs">#{jerseyNumber}</span>
+                          )}
+                          {displayName}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">
+                          {jerseyNumber !== null && (
+                            <span className="text-muted-foreground mr-1.5 text-xs">#{jerseyNumber}</span>
+                          )}
+                          {displayName}
+                          <span className="text-xs text-muted-foreground ml-1.5">(sub)</span>
                         </span>
                       )}
-                      {s.player.displayName}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold">{s.points}</td>
-                  <td className="px-3 py-2 text-right">{s.rebounds}</td>
-                  <td className="px-3 py-2 text-right">{s.assists}</td>
-                </tr>
-              ))
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold">{s.points}</td>
+                    <td className="px-3 py-2 text-right">{s.rebounds}</td>
+                    <td className="px-3 py-2 text-right">{s.assists}</td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
           {played.length > 0 && (

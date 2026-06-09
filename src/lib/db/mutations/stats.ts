@@ -4,7 +4,8 @@ import { EventType } from "@prisma/client";
 interface ApplyEventInput {
   gameId: string;
   eventType: EventType;
-  playerId: string;
+  playerId: string | null;
+  substituteStatsId?: string | null;
   teamId: string;
   isHome: boolean;
   quarter: number;
@@ -13,7 +14,7 @@ interface ApplyEventInput {
 }
 
 export async function applyGameEvent(input: ApplyEventInput) {
-  const { gameId, eventType, playerId, teamId, isHome, quarter, value = 1, createdBy } = input;
+  const { gameId, eventType, playerId, substituteStatsId, teamId, isHome, quarter, value = 1, createdBy } = input;
 
   const lastEvent = await prisma.gameEvent.findFirst({
     where: { gameId },
@@ -28,11 +29,18 @@ export async function applyGameEvent(input: ApplyEventInput) {
 
   const scoreField = isHome ? "homeScore" : "awayScore";
 
-  return prisma.$transaction([
-    prisma.gameEvent.create({
-      data: { gameId, eventType, playerId, teamId, value, quarter, sequence, createdBy },
-    }),
-    prisma.playerGameStats.upsert({
+  let playerStatOp;
+  if (substituteStatsId) {
+    playerStatOp = prisma.playerGameStats.update({
+      where: { id: substituteStatsId },
+      data: {
+        points: isPoint ? { increment: value } : undefined,
+        rebounds: isRebound ? { increment: value } : undefined,
+        assists: isAssist ? { increment: value } : undefined,
+      },
+    });
+  } else if (playerId) {
+    playerStatOp = prisma.playerGameStats.upsert({
       where: { gameId_playerId: { gameId, playerId } },
       create: {
         gameId,
@@ -49,7 +57,16 @@ export async function applyGameEvent(input: ApplyEventInput) {
         assists: isAssist ? { increment: value } : undefined,
         gamePlayed: true,
       },
+    });
+  } else {
+    throw new Error("Either playerId or substituteStatsId is required");
+  }
+
+  return prisma.$transaction([
+    prisma.gameEvent.create({
+      data: { gameId, eventType, playerId, substituteStatsId, teamId, value, quarter, sequence, createdBy },
     }),
+    playerStatOp,
     prisma.teamGameStats.upsert({
       where: { gameId_teamId: { gameId, teamId } },
       create: { gameId, teamId, isHome, score: isPoint ? value : 0 },
@@ -76,23 +93,24 @@ export async function undoGameEvent(eventId: string) {
   const isRebound = event.eventType === "REBOUND";
   const isAssist = event.eventType === "ASSIST";
 
+  const statDecrement = {
+    points: isPoint ? { decrement: event.value } : undefined,
+    rebounds: isRebound ? { decrement: event.value } : undefined,
+    assists: isAssist ? { decrement: event.value } : undefined,
+  };
+
+  const playerStatOps = event.substituteStatsId
+    ? [prisma.playerGameStats.update({ where: { id: event.substituteStatsId }, data: statDecrement })]
+    : event.playerId
+    ? [prisma.playerGameStats.update({ where: { gameId_playerId: { gameId: event.gameId, playerId: event.playerId } }, data: statDecrement })]
+    : [];
+
   return prisma.$transaction([
     prisma.gameEvent.update({
       where: { id: eventId },
       data: { undone: true, undoneAt: new Date() },
     }),
-    ...(event.playerId
-      ? [
-          prisma.playerGameStats.update({
-            where: { gameId_playerId: { gameId: event.gameId, playerId: event.playerId } },
-            data: {
-              points: isPoint ? { decrement: event.value } : undefined,
-              rebounds: isRebound ? { decrement: event.value } : undefined,
-              assists: isAssist ? { decrement: event.value } : undefined,
-            },
-          }),
-        ]
-      : []),
+    ...playerStatOps,
     ...(event.teamId && isPoint
       ? [
           prisma.teamGameStats.update({

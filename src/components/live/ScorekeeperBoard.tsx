@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { RotateCcw, ChevronRight, CheckCircle } from "lucide-react";
+import { RotateCcw, ChevronRight, CheckCircle, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Team {
@@ -44,6 +44,17 @@ interface PlayerStat {
   assists: number;
 }
 
+interface SubstituteEntry {
+  statsId: string;
+  displayName: string;
+  jerseyNumber: number | null;
+}
+
+type SelectedEntry =
+  | { type: "player"; id: string }
+  | { type: "sub"; statsId: string }
+  | null;
+
 interface Props {
   initialGame: GameState;
 }
@@ -53,12 +64,18 @@ type EventType = "POINT" | "REBOUND" | "ASSIST";
 export function ScorekeeperBoard({ initialGame }: Props) {
   const [game, setGame] = useState(initialGame);
   const [selectedTeamId, setSelectedTeamId] = useState<string>(initialGame.homeTeam.id);
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<SelectedEntry>(null);
   const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
   const [loading, setLoading] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
   const [playerStats, setPlayerStats] = useState<Record<string, PlayerStat>>({});
+  const [subStats, setSubStats] = useState<Record<string, PlayerStat>>({});
+  const [substitutes, setSubstitutes] = useState<Record<string, SubstituteEntry[]>>({});
+  const [showAddSub, setShowAddSub] = useState(false);
+  const [subName, setSubName] = useState("");
+  const [subJersey, setSubJersey] = useState("");
+  const [addingSub, setAddingSub] = useState(false);
 
   const selectedTeam = game.homeTeam.id === selectedTeamId ? game.homeTeam : game.awayTeam;
 
@@ -66,11 +83,26 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     const res = await fetch(`/api/games/${game.id}/stats`);
     if (!res.ok) return;
     const data = await res.json();
-    const map: Record<string, PlayerStat> = {};
+    const pMap: Record<string, PlayerStat> = {};
+    const sMap: Record<string, PlayerStat> = {};
+    const subMap: Record<string, SubstituteEntry[]> = {};
+
     for (const s of data.stats) {
-      map[s.playerId] = { points: s.points, rebounds: s.rebounds, assists: s.assists };
+      if (s.playerId) {
+        pMap[s.playerId] = { points: s.points, rebounds: s.rebounds, assists: s.assists };
+      } else if (s.substituteName) {
+        sMap[s.id] = { points: s.points, rebounds: s.rebounds, assists: s.assists };
+        if (!subMap[s.teamId]) subMap[s.teamId] = [];
+        subMap[s.teamId].push({
+          statsId: s.id,
+          displayName: s.substituteName,
+          jerseyNumber: s.substituteJersey ?? null,
+        });
+      }
     }
-    setPlayerStats(map);
+    setPlayerStats(pMap);
+    setSubStats(sMap);
+    setSubstitutes(subMap);
   }, [game.id]);
 
   useEffect(() => {
@@ -133,7 +165,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
   }
 
   async function handleStatEvent(type: EventType, value: number) {
-    if (!selectedPlayerId) {
+    if (!selectedEntry) {
       toast.warning("Select a player first");
       return;
     }
@@ -145,7 +177,6 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     setLoading(true);
     const isHome = selectedTeamId === game.homeTeam.id;
 
-    // Optimistic score update
     if (type === "POINT") {
       setGame((prev) => ({
         ...prev,
@@ -154,34 +185,44 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       }));
     }
 
-    // Optimistic player stats update
-    setPlayerStats((prev) => {
-      const cur = prev[selectedPlayerId] ?? { points: 0, rebounds: 0, assists: 0 };
-      return {
-        ...prev,
-        [selectedPlayerId]: {
-          points: type === "POINT" ? cur.points + value : cur.points,
-          rebounds: type === "REBOUND" ? cur.rebounds + value : cur.rebounds,
-          assists: type === "ASSIST" ? cur.assists + value : cur.assists,
-        },
-      };
-    });
+    if (selectedEntry.type === "player") {
+      setPlayerStats((prev) => {
+        const cur = prev[selectedEntry.id] ?? { points: 0, rebounds: 0, assists: 0 };
+        return {
+          ...prev,
+          [selectedEntry.id]: {
+            points: type === "POINT" ? cur.points + value : cur.points,
+            rebounds: type === "REBOUND" ? cur.rebounds + value : cur.rebounds,
+            assists: type === "ASSIST" ? cur.assists + value : cur.assists,
+          },
+        };
+      });
+    } else {
+      setSubStats((prev) => {
+        const cur = prev[selectedEntry.statsId] ?? { points: 0, rebounds: 0, assists: 0 };
+        return {
+          ...prev,
+          [selectedEntry.statsId]: {
+            points: type === "POINT" ? cur.points + value : cur.points,
+            rebounds: type === "REBOUND" ? cur.rebounds + value : cur.rebounds,
+            assists: type === "ASSIST" ? cur.assists + value : cur.assists,
+          },
+        };
+      });
+    }
+
+    const body =
+      selectedEntry.type === "player"
+        ? { type, playerId: selectedEntry.id, teamId: selectedTeamId, isHome, quarter: game.currentQuarter, value }
+        : { type, substituteStatsId: selectedEntry.statsId, teamId: selectedTeamId, isHome, quarter: game.currentQuarter, value };
 
     const res = await fetch(`/api/games/${game.id}/events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type,
-        playerId: selectedPlayerId,
-        teamId: selectedTeamId,
-        isHome,
-        quarter: game.currentQuarter,
-        value,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
-      // Rollback score
       if (type === "POINT") {
         setGame((prev) => ({
           ...prev,
@@ -189,26 +230,42 @@ export function ScorekeeperBoard({ initialGame }: Props) {
           awayScore: !isHome ? prev.awayScore - value : prev.awayScore,
         }));
       }
-      // Rollback player stats
-      setPlayerStats((prev) => {
-        const cur = prev[selectedPlayerId] ?? { points: 0, rebounds: 0, assists: 0 };
-        return {
-          ...prev,
-          [selectedPlayerId]: {
-            points: type === "POINT" ? cur.points - value : cur.points,
-            rebounds: type === "REBOUND" ? cur.rebounds - value : cur.rebounds,
-            assists: type === "ASSIST" ? cur.assists - value : cur.assists,
-          },
-        };
-      });
+      if (selectedEntry.type === "player") {
+        setPlayerStats((prev) => {
+          const cur = prev[selectedEntry.id] ?? { points: 0, rebounds: 0, assists: 0 };
+          return {
+            ...prev,
+            [selectedEntry.id]: {
+              points: type === "POINT" ? cur.points - value : cur.points,
+              rebounds: type === "REBOUND" ? cur.rebounds - value : cur.rebounds,
+              assists: type === "ASSIST" ? cur.assists - value : cur.assists,
+            },
+          };
+        });
+      } else {
+        setSubStats((prev) => {
+          const cur = prev[selectedEntry.statsId] ?? { points: 0, rebounds: 0, assists: 0 };
+          return {
+            ...prev,
+            [selectedEntry.statsId]: {
+              points: type === "POINT" ? cur.points - value : cur.points,
+              rebounds: type === "REBOUND" ? cur.rebounds - value : cur.rebounds,
+              assists: type === "ASSIST" ? cur.assists - value : cur.assists,
+            },
+          };
+        });
+      }
       toast.error("Failed to record stat");
     } else {
       const data = await res.json();
-      const playerName = selectedTeam.players.find((p) => p.id === selectedPlayerId)?.displayName ?? "Player";
+      const playerName =
+        selectedEntry.type === "player"
+          ? (selectedTeam.players.find((p) => p.id === selectedEntry.id)?.displayName ?? "Player")
+          : ((substitutes[selectedTeamId] ?? []).find((s) => s.statsId === selectedEntry.statsId)?.displayName ?? "Sub");
       setLastEvent({
         id: data.event.id,
         eventType: type,
-        playerId: selectedPlayerId,
+        playerId: selectedEntry.type === "player" ? selectedEntry.id : null,
         teamId: selectedTeamId,
         quarter: game.currentQuarter,
         playerName,
@@ -235,7 +292,53 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     setLoading(false);
   }
 
-  const canRecord = !loading && !!selectedPlayerId && game.isLive;
+  async function handleAddSub() {
+    if (!subName.trim()) return;
+    setAddingSub(true);
+
+    const res = await fetch(`/api/games/${game.id}/substitute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: subName.trim(),
+        jersey: subJersey ? parseInt(subJersey) : undefined,
+        teamId: selectedTeamId,
+      }),
+    });
+
+    if (!res.ok) {
+      toast.error("Failed to add substitute");
+    } else {
+      const data = await res.json();
+      const newSub: SubstituteEntry = {
+        statsId: data.substitute.id,
+        displayName: data.substitute.substituteName,
+        jerseyNumber: data.substitute.substituteJersey ?? null,
+      };
+      setSubstitutes((prev) => ({
+        ...prev,
+        [selectedTeamId]: [...(prev[selectedTeamId] ?? []), newSub],
+      }));
+      setSubStats((prev) => ({
+        ...prev,
+        [newSub.statsId]: { points: 0, rebounds: 0, assists: 0 },
+      }));
+      setShowAddSub(false);
+      setSubName("");
+      setSubJersey("");
+      toast.success(`${newSub.displayName} added as substitute`);
+    }
+    setAddingSub(false);
+  }
+
+  function handleCancelAddSub() {
+    setShowAddSub(false);
+    setSubName("");
+    setSubJersey("");
+  }
+
+  const canRecord = !loading && !!selectedEntry && game.isLive;
+  const teamSubs = substitutes[selectedTeamId] ?? [];
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
@@ -301,7 +404,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         {[game.homeTeam, game.awayTeam].map((team) => (
           <button
             key={team.id}
-            onClick={() => { setSelectedTeamId(team.id); setSelectedPlayerId(null); }}
+            onClick={() => { setSelectedTeamId(team.id); setSelectedEntry(null); setShowAddSub(false); setSubName(""); setSubJersey(""); }}
             className={cn(
               "flex-1 py-3 text-sm font-semibold transition-colors",
               selectedTeamId === team.id
@@ -322,11 +425,11 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         <div className="grid grid-cols-2 gap-1 p-2">
           {selectedTeam.players.map((player) => {
             const stats = playerStats[player.id];
-            const isSelected = selectedPlayerId === player.id;
+            const isSelected = selectedEntry?.type === "player" && selectedEntry.id === player.id;
             return (
               <button
                 key={player.id}
-                onClick={() => setSelectedPlayerId(player.id === selectedPlayerId ? null : player.id)}
+                onClick={() => setSelectedEntry(isSelected ? null : { type: "player", id: player.id })}
                 className={cn(
                   "px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left",
                   isSelected
@@ -341,13 +444,83 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                   {player.displayName}
                 </div>
                 <div className={cn("text-xs mt-0.5 font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
-                  {stats
-                    ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A`
-                    : "0P · 0R · 0A"}
+                  {stats ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A` : "0P · 0R · 0A"}
                 </div>
               </button>
             );
           })}
+
+          {teamSubs.map((sub) => {
+            const stats = subStats[sub.statsId];
+            const isSelected = selectedEntry?.type === "sub" && selectedEntry.statsId === sub.statsId;
+            return (
+              <button
+                key={sub.statsId}
+                onClick={() => setSelectedEntry(isSelected ? null : { type: "sub", statsId: sub.statsId })}
+                className={cn(
+                  "px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left",
+                  isSelected
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/50 hover:bg-muted text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-1">
+                  {sub.jerseyNumber !== null && (
+                    <span className="text-xs opacity-60">#{sub.jerseyNumber}</span>
+                  )}
+                  <span>{sub.displayName}</span>
+                  <span className={cn("text-xs", isSelected ? "opacity-60" : "text-muted-foreground")}>(sub)</span>
+                </div>
+                <div className={cn("text-xs mt-0.5 font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
+                  {stats ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A` : "0P · 0R · 0A"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="px-2 pb-2 border-t pt-2">
+          {showAddSub ? (
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                placeholder="Name *"
+                value={subName}
+                onChange={(e) => setSubName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddSub()}
+                className="flex-1 px-2 py-1.5 text-sm rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                autoFocus
+              />
+              <input
+                type="number"
+                placeholder="#"
+                value={subJersey}
+                onChange={(e) => setSubJersey(e.target.value)}
+                className="w-14 px-2 py-1.5 text-sm rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                onClick={handleAddSub}
+                disabled={!subName.trim() || addingSub}
+                className="px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded font-medium disabled:opacity-50 whitespace-nowrap"
+              >
+                {addingSub ? "…" : "Add"}
+              </button>
+              <button
+                onClick={handleCancelAddSub}
+                className="p-1.5 border rounded hover:bg-muted text-muted-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddSub(true)}
+              className="w-full py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors flex items-center justify-center gap-1"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              Add Substitute
+            </button>
+          )}
         </div>
       </div>
 
