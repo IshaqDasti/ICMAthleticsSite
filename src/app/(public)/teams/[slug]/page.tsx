@@ -22,7 +22,7 @@ export default async function TeamPage({ params }: { params: { slug: string } })
       include: {
         players: {
           include: { careerStats: true },
-          orderBy: { jerseyNumber: "asc" },
+          orderBy: { lastName: "asc" },
         },
         seasons: true,
       },
@@ -31,6 +31,16 @@ export default async function TeamPage({ params }: { params: { slug: string } })
   ]);
 
   if (!team || !season) notFound();
+
+  team.players.sort((a, b) => {
+    const na = a.jerseyNumber, nb = b.jerseyNumber;
+    if (na === null && nb === null) return 0;
+    if (na === null) return 1;
+    if (nb === null) return -1;
+    const ia = parseInt(na, 10), ib = parseInt(nb, 10);
+    if (ia !== ib) return ia - ib;
+    return na.length - nb.length;
+  });
 
   const teamSeason = team.seasons.find((s) => s.seasonId === season.id);
   const games = await getGames({ seasonId: season.id, teamId: team.id });

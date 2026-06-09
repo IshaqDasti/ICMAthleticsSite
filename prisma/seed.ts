@@ -146,7 +146,7 @@ async function main() {
       const lastName = (row["Attendee Last Name"] ?? "").trim();
       const teamName = (row["Team Name Spring 26"] ?? "").trim();
       const displayName = (row["Name on Jersey"] ?? firstName).trim();
-      const jerseyNumber = row["Jersey Number"] ? parseInt(row["Jersey Number"]) : null;
+      const jerseyNumber = row["Jersey Number"]?.trim() || null;
       const email = (row["Attendee Email"] ?? "").trim() || null;
       const instagramHandle = (row["Instagram Handle"] ?? "").trim().replace("@", "") || null;
       const dobStr = (row["DOB"] ?? "").trim();
@@ -167,7 +167,7 @@ async function main() {
           firstName, lastName,
           displayName: displayName || firstName,
           slug,
-          jerseyNumber: isNaN(jerseyNumber!) ? null : jerseyNumber,
+          jerseyNumber,
           teamId,
           email,
           instagramHandle,

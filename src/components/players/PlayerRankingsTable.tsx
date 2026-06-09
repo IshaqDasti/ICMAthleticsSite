@@ -13,7 +13,7 @@ interface PlayerRow {
     lastName: string;
     displayName: string;
     slug: string;
-    jerseyNumber: number | null;
+    jerseyNumber: string | null;
     team: { id: string; name: string; slug: string } | null;
   };
   gamesPlayed: number;

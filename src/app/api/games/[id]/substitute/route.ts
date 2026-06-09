@@ -16,7 +16,7 @@ export const POST = withAuth(async (req: NextRequest, _user, { params }) => {
       gameId: params.id,
       teamId,
       substituteName: name.trim(),
-      substituteJersey: jersey ? Number(jersey) : null,
+      substituteJersey: jersey?.trim() || null,
       gamePlayed: true,
     },
   });

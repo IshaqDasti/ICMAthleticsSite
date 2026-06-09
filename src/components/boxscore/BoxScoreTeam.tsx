@@ -9,12 +9,12 @@ interface PlayerStat {
   assists: number;
   gamePlayed: boolean;
   substituteName: string | null;
-  substituteJersey: number | null;
+  substituteJersey: string | null;
   player: {
     id: string;
     displayName: string;
     slug: string;
-    jerseyNumber: number | null;
+    jerseyNumber: string | null;
     photoUrl: string | null;
   } | null;
 }

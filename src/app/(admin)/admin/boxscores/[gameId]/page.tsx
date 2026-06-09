@@ -12,7 +12,7 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
         include: {
           players: {
             select: { id: true, displayName: true, jerseyNumber: true },
-            orderBy: { jerseyNumber: "asc" },
+            orderBy: { lastName: "asc" },
           },
         },
       },
@@ -20,7 +20,7 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
         include: {
           players: {
             select: { id: true, displayName: true, jerseyNumber: true },
-            orderBy: { jerseyNumber: "asc" },
+            orderBy: { lastName: "asc" },
           },
         },
       },
@@ -34,8 +34,20 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
     game.playerGameStats.filter((s) => s.playerId !== null).map((s) => [s.playerId!, s])
   );
 
+  function jerseySort<T extends { jerseyNumber: string | null }>(arr: T[]): T[] {
+    return [...arr].sort((a, b) => {
+      const na = a.jerseyNumber, nb = b.jerseyNumber;
+      if (na === null && nb === null) return 0;
+      if (na === null) return 1;
+      if (nb === null) return -1;
+      const ia = parseInt(na, 10), ib = parseInt(nb, 10);
+      if (ia !== ib) return ia - ib;
+      return na.length - nb.length;
+    });
+  }
+
   const buildRows = (teamId: string, players: typeof game.homeTeam.players) =>
-    players.map((p) => {
+    jerseySort(players).map((p) => {
       const stat = existingStats.get(p.id);
       return {
         rowKey: p.id,

@@ -12,7 +12,7 @@ interface Team {
   players: Array<{
     id: string;
     displayName: string;
-    jerseyNumber: number | null;
+    jerseyNumber: string | null;
   }>;
 }
 
@@ -47,7 +47,7 @@ interface PlayerStat {
 interface SubstituteEntry {
   statsId: string;
   displayName: string;
-  jerseyNumber: number | null;
+  jerseyNumber: string | null;
 }
 
 type SelectedEntry =
@@ -301,7 +301,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: subName.trim(),
-        jersey: subJersey ? parseInt(subJersey) : undefined,
+        jersey: subJersey.trim() || undefined,
         teamId: selectedTeamId,
       }),
     });
@@ -492,7 +492,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                 autoFocus
               />
               <input
-                type="number"
+                type="text"
                 placeholder="#"
                 value={subJersey}
                 onChange={(e) => setSubJersey(e.target.value)}

@@ -123,7 +123,7 @@ model Player {
   lastName        String
   displayName     String
   slug            String    @unique
-  jerseyNumber    Int?
+  jerseyNumber    String?
   photoUrl        String?
   teamId          String?
   email           String?
@@ -203,7 +203,7 @@ model PlayerGameStats {
   assists          Int     @default(0)
   gamePlayed       Boolean @default(false)
   substituteName   String?
-  substituteJersey Int?
+  substituteJersey String?
 
   game   Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
   player Player? @relation(fields: [playerId], references: [id], onDelete: Cascade)

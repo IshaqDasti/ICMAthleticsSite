@@ -25,7 +25,7 @@ export default function NewPlayerPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
-        jerseyNumber: form.jerseyNumber ? parseInt(form.jerseyNumber) : null,
+        jerseyNumber: form.jerseyNumber || null,
         teamId: form.teamId || null,
       }),
     });
@@ -42,7 +42,7 @@ export default function NewPlayerPage() {
     { name: "firstName", label: "First Name", required: true },
     { name: "lastName", label: "Last Name", required: true },
     { name: "displayName", label: "Jersey Name (display)", placeholder: "e.g. Diakite" },
-    { name: "jerseyNumber", label: "Jersey Number", type: "number" },
+    { name: "jerseyNumber", label: "Jersey Number", placeholder: "e.g. 00, 0, 23" },
     { name: "email", label: "Email", type: "email" },
     { name: "instagramHandle", label: "Instagram Handle", placeholder: "@handle" },
   ];

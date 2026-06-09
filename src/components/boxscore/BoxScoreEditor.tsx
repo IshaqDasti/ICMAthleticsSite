@@ -10,7 +10,7 @@ interface PlayerRow {
   substituteStatsId: string | null;
   teamId: string;
   displayName: string;
-  jerseyNumber: number | null;
+  jerseyNumber: string | null;
   isSubstitute: boolean;
   points: number;
   rebounds: number;
@@ -57,7 +57,7 @@ export function BoxScoreEditor({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: subName.trim(),
-        jersey: subJersey ? parseInt(subJersey) : undefined,
+        jersey: subJersey.trim() || undefined,
         teamId,
       }),
     });
@@ -210,7 +210,7 @@ export function BoxScoreEditor({
                 autoFocus
               />
               <input
-                type="number"
+                type="text"
                 placeholder="#"
                 value={subJersey}
                 onChange={(e) => setSubJersey(e.target.value)}

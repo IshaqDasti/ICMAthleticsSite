@@ -12,7 +12,7 @@ export default async function LiveGamePage({ params }: { params: { gameId: strin
         include: {
           players: {
             select: { id: true, displayName: true, jerseyNumber: true },
-            orderBy: { jerseyNumber: "asc" },
+            orderBy: { lastName: "asc" },
           },
         },
       },
@@ -20,7 +20,7 @@ export default async function LiveGamePage({ params }: { params: { gameId: strin
         include: {
           players: {
             select: { id: true, displayName: true, jerseyNumber: true },
-            orderBy: { jerseyNumber: "asc" },
+            orderBy: { lastName: "asc" },
           },
         },
       },
@@ -28,6 +28,18 @@ export default async function LiveGamePage({ params }: { params: { gameId: strin
   });
 
   if (!game) notFound();
+
+  function jerseySort<T extends { jerseyNumber: string | null }>(arr: T[]): T[] {
+    return [...arr].sort((a, b) => {
+      const na = a.jerseyNumber, nb = b.jerseyNumber;
+      if (na === null && nb === null) return 0;
+      if (na === null) return 1;
+      if (nb === null) return -1;
+      const ia = parseInt(na, 10), ib = parseInt(nb, 10);
+      if (ia !== ib) return ia - ib;
+      return na.length - nb.length;
+    });
+  }
 
   const initialGame = {
     id: game.id,
@@ -39,12 +51,12 @@ export default async function LiveGamePage({ params }: { params: { gameId: strin
     homeTeam: {
       id: game.homeTeam.id,
       name: game.homeTeam.name,
-      players: game.homeTeam.players,
+      players: jerseySort(game.homeTeam.players),
     },
     awayTeam: {
       id: game.awayTeam.id,
       name: game.awayTeam.name,
-      players: game.awayTeam.players,
+      players: jerseySort(game.awayTeam.players),
     },
   };
 

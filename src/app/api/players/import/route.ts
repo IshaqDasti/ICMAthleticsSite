@@ -28,7 +28,7 @@ export const POST = withAuth(async (req) => {
       const lastName = (row["Attendee Last Name"] ?? row["Last Name"] ?? "").trim();
       const teamName = (row["Team Name Spring 26"] ?? row["Team"] ?? "").trim();
       const displayName = (row["Name on Jersey"] ?? firstName).trim();
-      const jerseyNumber = row["Jersey Number"] ? parseInt(row["Jersey Number"]) : null;
+      const jerseyNumber = row["Jersey Number"]?.trim() || null;
       const email = (row["Attendee Email"] ?? "").trim() || null;
       const instagramHandle = (row["Instagram Handle"] ?? "").trim().replace("@", "") || null;
 
@@ -52,7 +52,7 @@ export const POST = withAuth(async (req) => {
           lastName,
           displayName: displayName || firstName,
           slug,
-          jerseyNumber: isNaN(jerseyNumber!) ? null : jerseyNumber,
+          jerseyNumber,
           teamId: team?.id ?? null,
           email,
           instagramHandle,

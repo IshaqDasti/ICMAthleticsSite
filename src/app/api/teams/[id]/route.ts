@@ -8,7 +8,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const team = await prisma.team.findUnique({
     where: { id: params.id },
     include: {
-      players: { orderBy: { jerseyNumber: "asc" } },
+      players: { orderBy: { lastName: "asc" } },
       seasons: { include: { season: true } },
     },
   });
