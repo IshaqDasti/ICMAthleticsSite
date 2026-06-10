@@ -5,7 +5,7 @@ import { getBoxScore } from "@/lib/db/queries/games";
 import { withAuth } from "@/lib/auth/withAuth";
 import { prisma } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
-import { finalizeGame } from "@/lib/db/mutations/standings";
+import { finalizeGame, recalculateTeams } from "@/lib/db/mutations/standings";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const data = await getBoxScore(params.id);
@@ -42,7 +42,7 @@ export const PUT = withAuth(async (req, _user, { params }) => {
   const scoresProvided = homeScore !== undefined || awayScore !== undefined;
 
   const prevGame = scoresProvided
-    ? await prisma.game.findUnique({ where: { id: params.id }, select: { status: true } })
+    ? await prisma.game.findUnique({ where: { id: params.id }, select: { status: true, homeTeamId: true, awayTeamId: true, seasonId: true } })
     : null;
 
   await prisma.$transaction([
@@ -92,8 +92,15 @@ export const PUT = withAuth(async (req, _user, { params }) => {
       : []),
   ]);
 
-  if (scoresProvided && prevGame?.status !== "COMPLETED") {
-    await finalizeGame(params.id);
+  if (scoresProvided) {
+    if (prevGame?.status !== "COMPLETED") {
+      await finalizeGame(params.id);
+    } else {
+      await recalculateTeams(
+        [prevGame.homeTeamId, prevGame.awayTeamId],
+        prevGame.seasonId
+      );
+    }
   }
 
   revalidatePath("/schedule");

@@ -1,5 +1,50 @@
 import { prisma } from "@/lib/db/client";
 
+function computeStreakFromResults(results: boolean[]): number {
+  let streak = 0;
+  for (let i = results.length - 1; i >= 0; i--) {
+    if (i === results.length - 1) { streak = results[i] ? 1 : -1; continue; }
+    if (results[i] === results[i + 1]) streak = results[i] ? streak + 1 : streak - 1;
+    else break;
+  }
+  return streak;
+}
+
+export async function recalculateTeams(teamIds: string[], seasonId: string) {
+  const completedGames = await prisma.game.findMany({
+    where: {
+      seasonId,
+      status: "COMPLETED",
+      OR: [{ homeTeamId: { in: teamIds } }, { awayTeamId: { in: teamIds } }],
+    },
+    orderBy: { scheduledAt: "asc" },
+  });
+
+  const updates = teamIds.map((teamId) => {
+    const games = completedGames.filter(
+      (g) => g.homeTeamId === teamId || g.awayTeamId === teamId
+    );
+    let wins = 0, losses = 0, pointsFor = 0, pointsAgainst = 0;
+    const results: boolean[] = [];
+    for (const g of games) {
+      const isHome = g.homeTeamId === teamId;
+      const teamScore = isHome ? g.homeScore : g.awayScore;
+      const oppScore = isHome ? g.awayScore : g.homeScore;
+      pointsFor += teamScore;
+      pointsAgainst += oppScore;
+      const won = teamScore > oppScore;
+      if (won) wins++; else losses++;
+      results.push(won);
+    }
+    return prisma.teamSeason.update({
+      where: { teamId_seasonId: { teamId, seasonId } },
+      data: { wins, losses, pointsFor, pointsAgainst, streak: computeStreakFromResults(results) },
+    });
+  });
+
+  return prisma.$transaction(updates);
+}
+
 export async function finalizeGame(gameId: string) {
   const game = await prisma.game.findUnique({
     where: { id: gameId },

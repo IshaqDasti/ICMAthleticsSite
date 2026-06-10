@@ -10,30 +10,30 @@ export const POST = withAuth(async (req: NextRequest) => {
 
   const completedGames = await prisma.game.findMany({
     where: { seasonId, status: "COMPLETED" },
-    include: { teamGameStats: true },
+    orderBy: { scheduledAt: "asc" },
   });
 
   const teamSeasons = await prisma.teamSeason.findMany({ where: { seasonId } });
 
   await prisma.$transaction(
     teamSeasons.map((ts) => {
-      const teamGames = completedGames.filter((g) =>
-        g.teamGameStats.some((tgs) => tgs.teamId === ts.teamId)
+      const teamGames = completedGames.filter(
+        (g) => g.homeTeamId === ts.teamId || g.awayTeamId === ts.teamId
       );
       let wins = 0, losses = 0, pointsFor = 0, pointsAgainst = 0, streak = 0;
       const results: boolean[] = [];
 
       for (const game of teamGames) {
-        const tgs = game.teamGameStats.find((s) => s.teamId === ts.teamId);
-        const oppTgs = game.teamGameStats.find((s) => s.teamId !== ts.teamId);
-        if (!tgs || !oppTgs) continue;
-        pointsFor += tgs.score;
-        pointsAgainst += oppTgs.score;
-        if (tgs.won) { wins++; results.push(true); }
+        const isHome = game.homeTeamId === ts.teamId;
+        const teamScore = isHome ? game.homeScore : game.awayScore;
+        const oppScore = isHome ? game.awayScore : game.homeScore;
+        pointsFor += teamScore;
+        pointsAgainst += oppScore;
+        const won = teamScore > oppScore;
+        if (won) { wins++; results.push(true); }
         else { losses++; results.push(false); }
       }
 
-      // Compute streak from most recent games
       for (let i = results.length - 1; i >= 0; i--) {
         if (i === results.length - 1) { streak = results[i] ? 1 : -1; continue; }
         if (results[i] === results[i + 1]) streak = results[i] ? streak + 1 : streak - 1;

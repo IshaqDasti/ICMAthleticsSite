@@ -286,6 +286,14 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       toast.error("Failed to undo");
     } else {
       toast.success("Action undone");
+      if (lastEvent.eventType === "POINT") {
+        const isHome = lastEvent.teamId === game.homeTeam.id;
+        setGame((prev) => ({
+          ...prev,
+          homeScore: isHome ? prev.homeScore - lastEvent.value : prev.homeScore,
+          awayScore: !isHome ? prev.awayScore - lastEvent.value : prev.awayScore,
+        }));
+      }
       setLastEvent(null);
       fetchStats();
     }
