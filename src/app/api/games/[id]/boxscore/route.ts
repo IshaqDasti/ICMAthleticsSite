@@ -32,14 +32,16 @@ interface SubstituteStatInput {
 
 export const PUT = withAuth(async (req, _user, { params }) => {
   const body = await req.json();
-  const { playerStats, substituteStats, homeScore, awayScore } = body as {
+  const { playerStats, substituteStats, homeScore, awayScore, scorekeeperName } = body as {
     playerStats: PlayerStatInput[];
     substituteStats?: SubstituteStatInput[];
     homeScore?: number;
     awayScore?: number;
+    scorekeeperName?: string;
   };
 
   const scoresProvided = homeScore !== undefined || awayScore !== undefined;
+  const scorekeeperOnly = !scoresProvided && scorekeeperName !== undefined;
 
   const prevGame = scoresProvided
     ? await prisma.game.findUnique({ where: { id: params.id }, select: { status: true, homeTeamId: true, awayTeamId: true, seasonId: true } })
@@ -77,6 +79,14 @@ export const PUT = withAuth(async (req, _user, { params }) => {
         },
       })
     ),
+    ...(scorekeeperOnly
+      ? [
+          prisma.game.update({
+            where: { id: params.id },
+            data: { scorekeeperName: scorekeeperName || null },
+          }),
+        ]
+      : []),
     ...(scoresProvided
       ? [
           prisma.game.update({
@@ -84,6 +94,7 @@ export const PUT = withAuth(async (req, _user, { params }) => {
             data: {
               ...(homeScore !== undefined && { homeScore }),
               ...(awayScore !== undefined && { awayScore }),
+              ...(scorekeeperName !== undefined && { scorekeeperName: scorekeeperName || null }),
               status: "COMPLETED",
               isLive: false,
             },

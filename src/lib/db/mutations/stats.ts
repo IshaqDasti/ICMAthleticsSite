@@ -26,8 +26,10 @@ export async function applyGameEvent(input: ApplyEventInput) {
   const isPoint = eventType === "POINT";
   const isRebound = eventType === "REBOUND";
   const isAssist = eventType === "ASSIST";
+  const isFoul = eventType === "FOUL";
 
   const scoreField = isHome ? "homeScore" : "awayScore";
+  const teamFoulField = isHome ? "homeTeamFouls" : "awayTeamFouls";
 
   let playerStatOp;
   if (substituteStatsId) {
@@ -37,6 +39,7 @@ export async function applyGameEvent(input: ApplyEventInput) {
         points: isPoint ? { increment: value } : undefined,
         rebounds: isRebound ? { increment: value } : undefined,
         assists: isAssist ? { increment: value } : undefined,
+        fouls: isFoul ? { increment: value } : undefined,
       },
     });
   } else if (playerId) {
@@ -49,12 +52,14 @@ export async function applyGameEvent(input: ApplyEventInput) {
         points: isPoint ? value : 0,
         rebounds: isRebound ? value : 0,
         assists: isAssist ? value : 0,
+        fouls: isFoul ? value : 0,
         gamePlayed: true,
       },
       update: {
         points: isPoint ? { increment: value } : undefined,
         rebounds: isRebound ? { increment: value } : undefined,
         assists: isAssist ? { increment: value } : undefined,
+        fouls: isFoul ? { increment: value } : undefined,
         gamePlayed: true,
       },
     });
@@ -74,7 +79,10 @@ export async function applyGameEvent(input: ApplyEventInput) {
     }),
     prisma.game.update({
       where: { id: gameId },
-      data: { [scoreField]: isPoint ? { increment: value } : undefined },
+      data: {
+        [scoreField]: isPoint ? { increment: value } : undefined,
+        [teamFoulField]: isFoul ? { increment: value } : undefined,
+      },
     }),
   ]);
 }
@@ -89,14 +97,17 @@ export async function undoGameEvent(eventId: string) {
 
   const isHome = event.teamId === event.game.homeTeamId;
   const scoreField = isHome ? "homeScore" : "awayScore";
+  const teamFoulField = isHome ? "homeTeamFouls" : "awayTeamFouls";
   const isPoint = event.eventType === "POINT";
   const isRebound = event.eventType === "REBOUND";
   const isAssist = event.eventType === "ASSIST";
+  const isFoul = event.eventType === "FOUL";
 
   const statDecrement = {
     points: isPoint ? { decrement: event.value } : undefined,
     rebounds: isRebound ? { decrement: event.value } : undefined,
     assists: isAssist ? { decrement: event.value } : undefined,
+    fouls: isFoul ? { decrement: event.value } : undefined,
   };
 
   const playerStatOps = event.substituteStatsId
@@ -120,6 +131,14 @@ export async function undoGameEvent(eventId: string) {
           prisma.game.update({
             where: { id: event.gameId },
             data: { [scoreField]: { decrement: event.value } },
+          }),
+        ]
+      : []),
+    ...(event.teamId && isFoul
+      ? [
+          prisma.game.update({
+            where: { id: event.gameId },
+            data: { [teamFoulField]: { decrement: event.value } },
           }),
         ]
       : []),

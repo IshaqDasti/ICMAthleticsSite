@@ -108,6 +108,7 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
         initialHomeScore={game.homeScore}
         initialAwayScore={game.awayScore}
         initialRows={initialRows}
+        initialScorekeeperName={game.scorekeeperName}
       />
     </div>
   );

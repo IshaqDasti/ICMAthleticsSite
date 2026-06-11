@@ -7,6 +7,7 @@ interface PlayerStat {
   points: number;
   rebounds: number;
   assists: number;
+  fouls: number;
   gamePlayed: boolean;
   substituteName: string | null;
   substituteJersey: string | null;
@@ -34,8 +35,9 @@ export function BoxScoreTeam({ teamName, stats, isWinner }: Props) {
       points: acc.points + s.points,
       rebounds: acc.rebounds + s.rebounds,
       assists: acc.assists + s.assists,
+      fouls: acc.fouls + (s.fouls ?? 0),
     }),
-    { points: 0, rebounds: 0, assists: 0 }
+    { points: 0, rebounds: 0, assists: 0, fouls: 0 }
   );
 
   return (
@@ -54,12 +56,13 @@ export function BoxScoreTeam({ teamName, stats, isWinner }: Props) {
               <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider">PTS</th>
               <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider">REB</th>
               <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider">AST</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider">FOUL</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {played.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground text-xs">
+                <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground text-xs">
                   No stats recorded yet
                 </td>
               </tr>
@@ -93,6 +96,7 @@ export function BoxScoreTeam({ teamName, stats, isWinner }: Props) {
                     <td className="px-3 py-2 text-right font-semibold">{s.points}</td>
                     <td className="px-3 py-2 text-right">{s.rebounds}</td>
                     <td className="px-3 py-2 text-right">{s.assists}</td>
+                    <td className="px-3 py-2 text-right">{s.fouls ?? 0}</td>
                   </tr>
                 );
               })
@@ -105,6 +109,7 @@ export function BoxScoreTeam({ teamName, stats, isWinner }: Props) {
                 <td className="px-3 py-2 text-right">{totals.points}</td>
                 <td className="px-3 py-2 text-right">{totals.rebounds}</td>
                 <td className="px-3 py-2 text-right">{totals.assists}</td>
+                <td className="px-3 py-2 text-right">{totals.fouls}</td>
               </tr>
             </tfoot>
           )}

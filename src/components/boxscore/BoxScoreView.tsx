@@ -13,6 +13,7 @@ interface PlayerStat {
   points: number;
   rebounds: number;
   assists: number;
+  fouls: number;
   gamePlayed: boolean;
   substituteName: string | null;
   substituteJersey: string | null;

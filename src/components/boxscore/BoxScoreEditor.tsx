@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Save, UserPlus, X } from "lucide-react";
+import { Save, UserPlus, X, Trash2 } from "lucide-react";
 
 interface PlayerRow {
   rowKey: string;
@@ -25,6 +25,7 @@ interface Props {
   initialHomeScore: number;
   initialAwayScore: number;
   initialRows: PlayerRow[];
+  initialScorekeeperName: string | null;
 }
 
 export function BoxScoreEditor({
@@ -34,10 +35,12 @@ export function BoxScoreEditor({
   initialHomeScore,
   initialAwayScore,
   initialRows,
+  initialScorekeeperName,
 }: Props) {
   const [rows, setRows] = useState<PlayerRow[]>(initialRows);
   const [homeScore, setHomeScore] = useState(initialHomeScore);
   const [awayScore, setAwayScore] = useState(initialAwayScore);
+  const [scorekeeperName, setScorekeeperName] = useState(initialScorekeeperName ?? "");
   const [saving, setSaving] = useState(false);
   const [addingSubForTeam, setAddingSubForTeam] = useState<string | null>(null);
   const [subName, setSubName] = useState("");
@@ -94,6 +97,23 @@ export function BoxScoreEditor({
     setSubJersey("");
   }
 
+  async function handleDeleteSub(substituteStatsId: string, displayName: string) {
+    if (!confirm(`Remove ${displayName}? Their stats will be deleted from this game.`)) return;
+
+    const res = await fetch(`/api/games/${gameId}/substitute`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statsId: substituteStatsId }),
+    });
+
+    if (!res.ok) {
+      toast.error("Failed to remove substitute");
+    } else {
+      setRows((prev) => prev.filter((r) => r.substituteStatsId !== substituteStatsId));
+      toast.success(`${displayName} removed`);
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
 
@@ -121,7 +141,7 @@ export function BoxScoreEditor({
     const res = await fetch(`/api/games/${gameId}/boxscore`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ playerStats, substituteStats, homeScore, awayScore }),
+      body: JSON.stringify({ playerStats, substituteStats, homeScore, awayScore, scorekeeperName: scorekeeperName.trim() || null }),
     });
 
     if (res.ok) {
@@ -149,6 +169,7 @@ export function BoxScoreEditor({
               <th className="px-4 py-2 text-center w-16">REB</th>
               <th className="px-4 py-2 text-center w-16">AST</th>
               <th className="px-4 py-2 text-center w-20">Played</th>
+              <th className="px-4 py-2 w-10" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -184,6 +205,17 @@ export function BoxScoreEditor({
                     onChange={(e) => updateRow(row.rowKey, "gamePlayed", e.target.checked)}
                     className="w-4 h-4 accent-primary cursor-pointer"
                   />
+                </td>
+                <td className="px-2 py-2 text-center">
+                  {row.isSubstitute && (
+                    <button
+                      onClick={() => handleDeleteSub(row.substituteStatsId!, row.displayName)}
+                      className="p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                      title="Remove substitute"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -251,6 +283,16 @@ export function BoxScoreEditor({
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">
           Final Score
         </h2>
+        <div className="mb-4">
+          <label className="text-xs text-muted-foreground block mb-1">Scorekeeper</label>
+          <input
+            type="text"
+            value={scorekeeperName}
+            onChange={(e) => setScorekeeperName(e.target.value)}
+            placeholder="Enter scorekeeper name…"
+            className="w-full max-w-xs px-3 py-2 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
         <div className="flex items-center gap-6">
           <div className="flex-1">
             <label className="text-xs text-muted-foreground block mb-1">{homeTeam.name}</label>

@@ -41,6 +41,7 @@ enum EventType {
   POINT
   REBOUND
   ASSIST
+  FOUL
   QUARTER_END
   GAME_START
   GAME_END
@@ -173,8 +174,13 @@ model Game {
   homeQuarterScores Int[]      @default([])
   awayQuarterScores Int[]      @default([])
   currentQuarter    Int        @default(1)
+  homeTeamFouls     Int        @default(0)
+  awayTeamFouls     Int        @default(0)
+  homeTeamTimeouts  Int        @default(0)
+  awayTeamTimeouts  Int        @default(0)
   isLive            Boolean    @default(false)
   notes             String?
+  scorekeeperName   String?
 
   season          Season            @relation(fields: [seasonId], references: [id])
   homeTeam        Team              @relation("HomeTeam", fields: [homeTeamId], references: [id])
@@ -201,6 +207,7 @@ model PlayerGameStats {
   points           Int     @default(0)
   rebounds         Int     @default(0)
   assists          Int     @default(0)
+  fouls            Int     @default(0)
   gamePlayed       Boolean @default(false)
   substituteName   String?
   substituteJersey String?

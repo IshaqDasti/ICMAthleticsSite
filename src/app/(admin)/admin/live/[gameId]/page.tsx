@@ -48,6 +48,11 @@ export default async function LiveGamePage({ params }: { params: { gameId: strin
     currentQuarter: game.currentQuarter,
     isLive: game.isLive,
     status: game.status,
+    homeTeamFouls: game.homeTeamFouls,
+    awayTeamFouls: game.awayTeamFouls,
+    homeTeamTimeouts: game.homeTeamTimeouts,
+    awayTeamTimeouts: game.awayTeamTimeouts,
+    scorekeeperName: game.scorekeeperName,
     homeTeam: {
       id: game.homeTeam.id,
       name: game.homeTeam.name,
@@ -61,7 +66,7 @@ export default async function LiveGamePage({ params }: { params: { gameId: strin
   };
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto">
       <Link
         href="/admin/live"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"

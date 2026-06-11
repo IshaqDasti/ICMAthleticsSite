@@ -30,7 +30,12 @@ export const PUT = withAuth(async (req, _user, { params }) => {
       ...(body.scheduledAt !== undefined && { scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null }),
       ...(body.location !== undefined && { location: body.location }),
       ...(body.notes !== undefined && { notes: body.notes }),
+      ...(body.scorekeeperName !== undefined && { scorekeeperName: body.scorekeeperName }),
       ...(body.currentQuarter !== undefined && { currentQuarter: body.currentQuarter }),
+      // Reset team fouls and timeouts when starting 2nd half
+      ...(body.currentQuarter === 2 && { homeTeamFouls: 0, awayTeamFouls: 0, homeTeamTimeouts: 0, awayTeamTimeouts: 0 }),
+      ...(body.homeTeamTimeouts !== undefined && body.currentQuarter !== 2 && { homeTeamTimeouts: body.homeTeamTimeouts }),
+      ...(body.awayTeamTimeouts !== undefined && body.currentQuarter !== 2 && { awayTeamTimeouts: body.awayTeamTimeouts }),
     },
   });
   return NextResponse.json({ game });
