@@ -21,7 +21,6 @@ export default async function TeamPage({ params }: { params: { slug: string } })
       where: { slug: params.slug },
       include: {
         players: {
-          include: { careerStats: true },
           orderBy: { lastName: "asc" },
         },
         seasons: true,
@@ -31,6 +30,19 @@ export default async function TeamPage({ params }: { params: { slug: string } })
   ]);
 
   if (!team || !season) notFound();
+
+  const playerIds = team.players.map((p) => p.id);
+  const seasonStats = await prisma.playerGameStats.groupBy({
+    by: ["playerId"],
+    where: {
+      playerId: { in: playerIds },
+      game: { seasonId: season.id, status: "COMPLETED" },
+      gamePlayed: true,
+    },
+    _sum: { points: true, rebounds: true, assists: true },
+    _count: { gameId: true },
+  });
+  const seasonStatsMap = new Map(seasonStats.map((s) => [s.playerId, s]));
 
   team.players.sort((a, b) => {
     const na = a.jerseyNumber, nb = b.jerseyNumber;
@@ -97,7 +109,11 @@ export default async function TeamPage({ params }: { params: { slug: string } })
             </thead>
             <tbody className="divide-y divide-border">
               {team.players.map((player) => {
-                const gp = player.careerStats?.gamesPlayed ?? 0;
+                const s = seasonStatsMap.get(player.id);
+                const gp = s?._count.gameId ?? 0;
+                const pts = s?._sum.points ?? 0;
+                const reb = s?._sum.rebounds ?? 0;
+                const ast = s?._sum.assists ?? 0;
                 return (
                   <tr key={player.id} className="hover:bg-muted/30">
                     <td className="px-3 py-2 text-muted-foreground">
@@ -113,13 +129,13 @@ export default async function TeamPage({ params }: { params: { slug: string } })
                     </td>
                     <td className="px-3 py-2 text-right text-muted-foreground">{gp}</td>
                     <td className="px-3 py-2 text-right">
-                      {gp > 0 ? ((player.careerStats?.totalPoints ?? 0) / gp).toFixed(1) : "—"}
+                      {gp > 0 ? (pts / gp).toFixed(1) : "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {gp > 0 ? ((player.careerStats?.totalRebounds ?? 0) / gp).toFixed(1) : "—"}
+                      {gp > 0 ? (reb / gp).toFixed(1) : "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {gp > 0 ? ((player.careerStats?.totalAssists ?? 0) / gp).toFixed(1) : "—"}
+                      {gp > 0 ? (ast / gp).toFixed(1) : "—"}
                     </td>
                   </tr>
                 );

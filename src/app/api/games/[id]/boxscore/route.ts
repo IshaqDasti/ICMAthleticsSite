@@ -5,7 +5,7 @@ import { getBoxScore } from "@/lib/db/queries/games";
 import { withAuth } from "@/lib/auth/withAuth";
 import { prisma } from "@/lib/db/client";
 import { revalidatePath } from "next/cache";
-import { finalizeGame, recalculateTeams } from "@/lib/db/mutations/standings";
+import { finalizeGame, recalculateTeams, recalculatePlayerCareerStats } from "@/lib/db/mutations/standings";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const data = await getBoxScore(params.id);
@@ -111,6 +111,14 @@ export const PUT = withAuth(async (req, _user, { params }) => {
         [prevGame.homeTeamId, prevGame.awayTeamId],
         prevGame.seasonId
       );
+      const allGameStats = await prisma.playerGameStats.findMany({
+        where: { gameId: params.id, playerId: { not: null } },
+        select: { playerId: true },
+      });
+      const playerIds = allGameStats
+        .map((s) => s.playerId)
+        .filter((id): id is string => id !== null);
+      await recalculatePlayerCareerStats(playerIds);
     }
   }
 

@@ -45,6 +45,42 @@ export async function recalculateTeams(teamIds: string[], seasonId: string) {
   return prisma.$transaction(updates);
 }
 
+export async function recalculatePlayerCareerStats(playerIds: string[]) {
+  if (playerIds.length === 0) return;
+
+  const stats = await prisma.playerGameStats.groupBy({
+    by: ["playerId"],
+    where: { playerId: { in: playerIds }, gamePlayed: true },
+    _sum: { points: true, rebounds: true, assists: true },
+    _count: { gameId: true },
+  });
+
+  const updates = stats
+    .filter((s) => s.playerId !== null)
+    .map((s) =>
+      prisma.playerCareerStats.upsert({
+        where: { playerId: s.playerId! },
+        create: {
+          playerId: s.playerId!,
+          totalPoints: s._sum.points ?? 0,
+          totalRebounds: s._sum.rebounds ?? 0,
+          totalAssists: s._sum.assists ?? 0,
+          gamesPlayed: s._count.gameId,
+        },
+        update: {
+          totalPoints: s._sum.points ?? 0,
+          totalRebounds: s._sum.rebounds ?? 0,
+          totalAssists: s._sum.assists ?? 0,
+          gamesPlayed: s._count.gameId,
+        },
+      })
+    );
+
+  if (updates.length > 0) {
+    await prisma.$transaction(updates);
+  }
+}
+
 export async function finalizeGame(gameId: string) {
   const game = await prisma.game.findUnique({
     where: { id: gameId },
@@ -72,28 +108,7 @@ export async function finalizeGame(gameId: string) {
     return current <= 0 ? current - 1 : -1;
   };
 
-  const careerUpdates = game.playerGameStats
-    .filter((s) => s.playerId !== null)
-    .map((s) =>
-      prisma.playerCareerStats.upsert({
-        where: { playerId: s.playerId! },
-        create: {
-          playerId: s.playerId!,
-          totalPoints: s.points,
-          totalRebounds: s.rebounds,
-          totalAssists: s.assists,
-          gamesPlayed: 1,
-        },
-        update: {
-          totalPoints: { increment: s.points },
-          totalRebounds: { increment: s.rebounds },
-          totalAssists: { increment: s.assists },
-          gamesPlayed: { increment: 1 },
-        },
-      })
-    );
-
-  return prisma.$transaction([
+  await prisma.$transaction([
     prisma.teamSeason.update({
       where: { teamId_seasonId: { teamId: game.homeTeamId, seasonId: game.seasonId } },
       data: {
@@ -128,6 +143,10 @@ export async function finalizeGame(gameId: string) {
       where: { id: gameId },
       data: { status: "COMPLETED", isLive: false },
     }),
-    ...careerUpdates,
   ]);
+
+  const playerIds = game.playerGameStats
+    .map((s) => s.playerId)
+    .filter((id): id is string => id !== null);
+  await recalculatePlayerCareerStats(playerIds);
 }

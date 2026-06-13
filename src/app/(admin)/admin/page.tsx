@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/client";
 import { getActiveSeason } from "@/lib/db/queries/seasons";
 import Link from "next/link";
 import { Users, Trophy, Calendar, Radio, ClipboardEdit } from "lucide-react";
+import { RecalculateCareerStatsButton } from "./RecalculateCareerStatsButton";
 
 export default async function AdminDashboard() {
   const season = await getActiveSeason();
@@ -91,6 +92,7 @@ export default async function AdminDashboard() {
             </p>
           </div>
         </Link>
+        <RecalculateCareerStatsButton />
       </div>
 
       {season && (

@@ -25,5 +25,6 @@ export const config = {
     "/api/announcements/:path*",
     "/api/upload",
     "/api/stats/export",
+    "/api/stats/recalculate-career",
   ],
 };
