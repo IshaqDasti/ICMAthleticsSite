@@ -11,7 +11,7 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
       homeTeam: {
         include: {
           players: {
-            select: { id: true, displayName: true, jerseyNumber: true },
+            select: { id: true, firstName: true, lastName: true, jerseyNumber: true },
             orderBy: { lastName: "asc" },
           },
         },
@@ -19,7 +19,7 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
       awayTeam: {
         include: {
           players: {
-            select: { id: true, displayName: true, jerseyNumber: true },
+            select: { id: true, firstName: true, lastName: true, jerseyNumber: true },
             orderBy: { lastName: "asc" },
           },
         },
@@ -54,7 +54,7 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
         playerId: p.id,
         substituteStatsId: null,
         teamId,
-        displayName: p.displayName,
+        displayName: `${p.firstName} ${p.lastName}`,
         jerseyNumber: p.jerseyNumber,
         isSubstitute: false,
         points: stat?.points ?? 0,

@@ -706,31 +706,33 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       )}
 
       {/* Timeouts */}
-      <div className="rounded-xl border bg-card p-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Timeouts (this half)</p>
-        <div className="grid grid-cols-2 gap-3">
+      <div className="rounded-xl border bg-card px-3 py-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Timeouts (this half)</p>
+        <div className="grid grid-cols-2 gap-2">
           {[game.homeTeam, game.awayTeam].map((team) => {
             const isHome = team.id === game.homeTeam.id;
             const count = isHome ? game.homeTeamTimeouts : game.awayTeamTimeouts;
             return (
-              <div key={team.id} className="flex flex-col items-center gap-1.5">
-                <p className="text-xs font-medium text-muted-foreground truncate w-full text-center">{team.name}</p>
-                <span className="text-3xl font-black tabular-nums">{count}</span>
-                <div className="flex gap-1.5 w-full">
-                  <button
-                    onClick={() => handleTimeout(team.id, -1)}
-                    disabled={!game.isLive || count === 0}
-                    className="flex-1 py-1.5 rounded-lg border text-sm font-bold text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    −1
-                  </button>
-                  <button
-                    onClick={() => handleTimeout(team.id, 1)}
-                    disabled={!game.isLive}
-                    className="flex-1 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Timeout
-                  </button>
+              <div key={team.id} className="flex items-center gap-2">
+                <span className="text-xl font-black tabular-nums w-6 text-center shrink-0">{count}</span>
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground truncate">{team.name}</p>
+                  <div className="flex gap-1 w-full">
+                    <button
+                      onClick={() => handleTimeout(team.id, -1)}
+                      disabled={!game.isLive || count === 0}
+                      className="flex-1 py-1 rounded-md border text-xs font-bold text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      −1
+                    </button>
+                    <button
+                      onClick={() => handleTimeout(team.id, 1)}
+                      disabled={!game.isLive}
+                      className="flex-1 py-1 rounded-md bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      +TO
+                    </button>
+                  </div>
                 </div>
               </div>
             );

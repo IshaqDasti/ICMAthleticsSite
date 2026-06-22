@@ -13,7 +13,8 @@ interface PlayerStat {
   substituteJersey: string | null;
   player: {
     id: string;
-    displayName: string;
+    firstName: string;
+    lastName: string;
     slug: string;
     jerseyNumber: string | null;
     photoUrl: string | null;
@@ -68,7 +69,9 @@ export function BoxScoreTeam({ teamName, stats, isWinner }: Props) {
               </tr>
             ) : (
               played.map((s) => {
-                const displayName = s.player?.displayName ?? s.substituteName ?? "Unknown";
+                const displayName = s.player
+                  ? `${s.player.firstName} ${s.player.lastName}`
+                  : s.substituteName ?? "Unknown";
                 const jerseyNumber = s.player?.jerseyNumber ?? s.substituteJersey;
                 return (
                   <tr key={s.id} className="hover:bg-muted/30">

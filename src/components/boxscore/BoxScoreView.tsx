@@ -19,7 +19,8 @@ interface PlayerStat {
   substituteJersey: string | null;
   player: {
     id: string;
-    displayName: string;
+    firstName: string;
+    lastName: string;
     slug: string;
     jerseyNumber: string | null;
     photoUrl: string | null;

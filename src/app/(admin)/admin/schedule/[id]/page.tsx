@@ -3,13 +3,15 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { Trash2, RotateCcw } from "lucide-react";
 
 export default function EditGamePage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [resetting, setResetting] = useState(false);
+  const [gameStatus, setGameStatus] = useState<string>("SCHEDULED");
   const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
   const [seasons, setSeasons] = useState<Array<{ id: string; name: string }>>([]);
   const [form, setForm] = useState({
@@ -29,6 +31,7 @@ export default function EditGamePage() {
       const scheduled = game.scheduledAt
         ? new Date(game.scheduledAt).toISOString().slice(0, 16)
         : "";
+      setGameStatus(game.status ?? "SCHEDULED");
       setForm({
         seasonId: game.seasonId ?? "",
         homeTeamId: game.homeTeamId ?? "",
@@ -74,15 +77,44 @@ export default function EditGamePage() {
     }
   }
 
+  async function handleResetGame() {
+    if (!confirm("Reset this game? This will delete all stats, box scores, and game events, and revert standings. This cannot be undone.")) return;
+    setResetting(true);
+    const res = await fetch(`/api/games/${id}/live`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reset" }),
+    });
+    if (res.ok) {
+      toast.success("Game reset to scheduled");
+      setGameStatus("SCHEDULED");
+    } else {
+      toast.error("Failed to reset game");
+    }
+    setResetting(false);
+  }
+
   if (fetching) return <div className="text-muted-foreground">Loading…</div>;
 
   return (
     <div className="max-w-lg">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Edit Game</h1>
-        <button onClick={handleDelete} className="flex items-center gap-1 text-sm text-destructive hover:underline">
-          <Trash2 className="w-4 h-4" /> Delete
-        </button>
+        <div className="flex items-center gap-4">
+          {(gameStatus === "COMPLETED" || gameStatus === "IN_PROGRESS") && (
+            <button
+              onClick={handleResetGame}
+              disabled={resetting}
+              className="flex items-center gap-1 text-sm text-amber-600 hover:underline disabled:opacity-50"
+            >
+              <RotateCcw className="w-4 h-4" />
+              {resetting ? "Resetting…" : "Reset Game"}
+            </button>
+          )}
+          <button onClick={handleDelete} className="flex items-center gap-1 text-sm text-destructive hover:underline">
+            <Trash2 className="w-4 h-4" /> Delete
+          </button>
+        </div>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4 bg-card border rounded-xl p-6">
         <div>

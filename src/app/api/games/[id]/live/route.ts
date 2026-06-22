@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/withAuth";
 import { prisma } from "@/lib/db/client";
-import { finalizeGame } from "@/lib/db/mutations/standings";
+import { finalizeGame, unfinalizeGame } from "@/lib/db/mutations/standings";
 import { revalidatePath } from "next/cache";
 
 export const POST = withAuth(async (req, _user, { params }) => {
@@ -39,6 +39,15 @@ export const POST = withAuth(async (req, _user, { params }) => {
     revalidatePath("/schedule");
     revalidatePath("/");
     revalidatePath("/teams", "layout");
+    return NextResponse.json({ success: true });
+  }
+
+  if (action === "reset") {
+    await unfinalizeGame(params.id);
+    revalidatePath("/schedule");
+    revalidatePath("/");
+    revalidatePath("/teams", "layout");
+    revalidatePath("/players", "layout");
     return NextResponse.json({ success: true });
   }
 

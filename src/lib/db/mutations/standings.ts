@@ -55,30 +55,69 @@ export async function recalculatePlayerCareerStats(playerIds: string[]) {
     _count: { gameId: true },
   });
 
-  const updates = stats
-    .filter((s) => s.playerId !== null)
-    .map((s) =>
-      prisma.playerCareerStats.upsert({
-        where: { playerId: s.playerId! },
-        create: {
-          playerId: s.playerId!,
-          totalPoints: s._sum.points ?? 0,
-          totalRebounds: s._sum.rebounds ?? 0,
-          totalAssists: s._sum.assists ?? 0,
-          gamesPlayed: s._count.gameId,
-        },
-        update: {
-          totalPoints: s._sum.points ?? 0,
-          totalRebounds: s._sum.rebounds ?? 0,
-          totalAssists: s._sum.assists ?? 0,
-          gamesPlayed: s._count.gameId,
-        },
-      })
-    );
+  const statsMap = new Map(stats.map((s) => [s.playerId!, s]));
 
-  if (updates.length > 0) {
-    await prisma.$transaction(updates);
-  }
+  const updates = playerIds.map((playerId) => {
+    const s = statsMap.get(playerId);
+    return prisma.playerCareerStats.upsert({
+      where: { playerId },
+      create: {
+        playerId,
+        totalPoints: s?._sum.points ?? 0,
+        totalRebounds: s?._sum.rebounds ?? 0,
+        totalAssists: s?._sum.assists ?? 0,
+        gamesPlayed: s?._count.gameId ?? 0,
+      },
+      update: {
+        totalPoints: s?._sum.points ?? 0,
+        totalRebounds: s?._sum.rebounds ?? 0,
+        totalAssists: s?._sum.assists ?? 0,
+        gamesPlayed: s?._count.gameId ?? 0,
+      },
+    });
+  });
+
+  await prisma.$transaction(updates);
+}
+
+export async function unfinalizeGame(gameId: string) {
+  const game = await prisma.game.findUnique({
+    where: { id: gameId },
+    include: {
+      playerGameStats: { where: { playerId: { not: null } } },
+    },
+  });
+
+  if (!game) throw new Error("Game not found");
+
+  const playerIds = game.playerGameStats
+    .map((s) => s.playerId)
+    .filter((id): id is string => id !== null);
+
+  await prisma.$transaction([
+    prisma.gameEvent.deleteMany({ where: { gameId } }),
+    prisma.playerGameStats.deleteMany({ where: { gameId } }),
+    prisma.teamGameStats.deleteMany({ where: { gameId } }),
+    prisma.game.update({
+      where: { id: gameId },
+      data: {
+        status: "SCHEDULED",
+        isLive: false,
+        homeScore: 0,
+        awayScore: 0,
+        homeQuarterScores: [],
+        awayQuarterScores: [],
+        currentQuarter: 1,
+        homeTeamFouls: 0,
+        awayTeamFouls: 0,
+        homeTeamTimeouts: 0,
+        awayTeamTimeouts: 0,
+      },
+    }),
+  ]);
+
+  await recalculateTeams([game.homeTeamId, game.awayTeamId], game.seasonId);
+  await recalculatePlayerCareerStats(playerIds);
 }
 
 export async function finalizeGame(gameId: string) {

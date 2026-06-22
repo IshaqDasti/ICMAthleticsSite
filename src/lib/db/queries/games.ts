@@ -56,7 +56,8 @@ export async function getBoxScore(gameId: string) {
           player: {
             select: {
               id: true,
-              displayName: true,
+              firstName: true,
+              lastName: true,
               slug: true,
               jerseyNumber: true,
               photoUrl: true,
