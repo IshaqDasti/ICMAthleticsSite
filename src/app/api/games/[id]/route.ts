@@ -36,6 +36,8 @@ export const PUT = withAuth(async (req, _user, { params }) => {
       ...(body.currentQuarter === 2 && { homeTeamFouls: 0, awayTeamFouls: 0, homeTeamTimeouts: 0, awayTeamTimeouts: 0 }),
       ...(body.homeTeamTimeouts !== undefined && body.currentQuarter !== 2 && { homeTeamTimeouts: body.homeTeamTimeouts }),
       ...(body.awayTeamTimeouts !== undefined && body.currentQuarter !== 2 && { awayTeamTimeouts: body.awayTeamTimeouts }),
+      ...(body.homeTeamFouls !== undefined && body.currentQuarter !== 2 && { homeTeamFouls: body.homeTeamFouls }),
+      ...(body.awayTeamFouls !== undefined && body.currentQuarter !== 2 && { awayTeamFouls: body.awayTeamFouls }),
     },
   });
   return NextResponse.json({ game });

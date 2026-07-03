@@ -24,6 +24,30 @@ export const POST = withAuth(async (req: NextRequest, _user, { params }) => {
   return NextResponse.json({ substitute: record }, { status: 201 });
 }, "SCOREKEEPER");
 
+export const PATCH = withAuth(async (req: NextRequest, _user, { params }) => {
+  const { statsId, name, jersey } = await req.json();
+
+  if (!statsId || !name?.trim()) {
+    return NextResponse.json({ error: "statsId and name are required" }, { status: 400 });
+  }
+
+  const stat = await prisma.playerGameStats.findUnique({ where: { id: statsId } });
+
+  if (!stat || !stat.substituteName || stat.gameId !== params.id) {
+    return NextResponse.json({ error: "Substitute not found" }, { status: 404 });
+  }
+
+  const updated = await prisma.playerGameStats.update({
+    where: { id: statsId },
+    data: {
+      substituteName: name.trim(),
+      substituteJersey: jersey?.trim() || null,
+    },
+  });
+
+  return NextResponse.json({ substitute: updated });
+}, "SCOREKEEPER");
+
 export const DELETE = withAuth(async (req: NextRequest, _user, { params }) => {
   const { statsId } = await req.json();
 

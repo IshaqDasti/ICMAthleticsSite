@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { RotateCcw, ChevronRight, CheckCircle, UserPlus, X, Trash2 } from "lucide-react";
+import { RotateCcw, ChevronRight, CheckCircle, UserPlus, X, Trash2, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Team {
@@ -40,6 +40,25 @@ interface GameEvent {
   quarter: number;
   playerName?: string;
   teamName?: string;
+  value: number;
+}
+
+interface ActivityLogEntry {
+  id: string;
+  eventType: EventType;
+  playerName: string;
+  teamName: string;
+  quarter: number;
+  value: number;
+}
+
+interface RawEvent {
+  id: string;
+  eventType: string;
+  playerId: string | null;
+  substituteStatsId: string | null;
+  teamId: string | null;
+  quarter: number;
   value: number;
 }
 
@@ -83,6 +102,11 @@ export function ScorekeeperBoard({ initialGame }: Props) {
   const [subName, setSubName] = useState("");
   const [subJersey, setSubJersey] = useState("");
   const [addingSub, setAddingSub] = useState(false);
+  const [editingSubStatsId, setEditingSubStatsId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editJersey, setEditJersey] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
 
   const selectedTeam = game.homeTeam.id === selectedTeamId ? game.homeTeam : game.awayTeam;
 
@@ -103,9 +127,12 @@ export function ScorekeeperBoard({ initialGame }: Props) {
   })();
 
   const fetchStats = useCallback(async () => {
-    const res = await fetch(`/api/games/${game.id}/stats`);
-    if (!res.ok) return;
-    const data = await res.json();
+    const [statsRes, eventsRes] = await Promise.all([
+      fetch(`/api/games/${game.id}/stats`),
+      fetch(`/api/games/${game.id}/events`),
+    ]);
+    if (!statsRes.ok) return;
+    const data = await statsRes.json();
     const pMap: Record<string, PlayerStat> = {};
     const sMap: Record<string, PlayerStat> = {};
     const subMap: Record<string, SubstituteEntry[]> = {};
@@ -135,7 +162,25 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     setPlayerStats(pMap);
     setSubStats(sMap);
     setSubstitutes(subMap);
-  }, [game.id]);
+
+    if (eventsRes.ok) {
+      const eventsData = await eventsRes.json();
+      const allPlayers = [...initialGame.homeTeam.players, ...initialGame.awayTeam.players];
+      const allSubs = Object.values(subMap).flat();
+      const log: ActivityLogEntry[] = eventsData.events.map((e: RawEvent) => {
+        let playerName = "Unknown";
+        if (e.playerId) {
+          playerName = allPlayers.find((p) => p.id === e.playerId)?.displayName ?? "Player";
+        } else if (e.substituteStatsId) {
+          playerName = allSubs.find((s) => s.statsId === e.substituteStatsId)?.displayName ?? "Sub";
+        }
+        const isHome = e.teamId === initialGame.homeTeam.id;
+        const teamName = isHome ? initialGame.homeTeam.name : initialGame.awayTeam.name;
+        return { id: e.id, eventType: e.eventType as EventType, playerName, teamName, quarter: e.quarter, value: e.value };
+      });
+      setActivityLog(log);
+    }
+  }, [game.id, initialGame]);
 
   useEffect(() => {
     fetchStats();
@@ -184,6 +229,10 @@ export function ScorekeeperBoard({ initialGame }: Props) {
   }
 
   async function handleEndGame() {
+    if (!scorekeeperName.trim()) {
+      toast.error("Please enter a scorekeeper name before ending the game.");
+      return;
+    }
     if (!confirm("End game and finalize stats? This will update standings.")) return;
     setIsEnding(true);
     const res = await fetch(`/api/games/${game.id}/live`, {
@@ -232,6 +281,29 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     if (!res.ok) {
       setGame((prev) => ({ ...prev, [field]: current }));
       toast.error("Failed to update timeout");
+    }
+  }
+
+  async function handleTeamFoul(teamId: string, delta: number) {
+    if (!game.isLive) {
+      toast.warning("Start the game first");
+      return;
+    }
+    const isHome = teamId === game.homeTeam.id;
+    const field = isHome ? "homeTeamFouls" : "awayTeamFouls";
+    const current = isHome ? game.homeTeamFouls : game.awayTeamFouls;
+    const next = Math.max(0, current + delta);
+
+    setGame((prev) => ({ ...prev, [field]: next }));
+
+    const res = await fetch(`/api/games/${game.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: next }),
+    });
+    if (!res.ok) {
+      setGame((prev) => ({ ...prev, [field]: current }));
+      toast.error("Failed to update team foul");
     }
   }
 
@@ -361,6 +433,10 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         teamName: selectedTeam.name,
         value,
       });
+      setActivityLog((prev) => [
+        { id: data.event.id, eventType: type, playerName, teamName: selectedTeam.name, quarter: game.currentQuarter, value },
+        ...prev,
+      ]);
     }
   }
 
@@ -440,6 +516,46 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     setSubJersey("");
   }
 
+  function handleStartEditSub(sub: SubstituteEntry) {
+    setEditingSubStatsId(sub.statsId);
+    setEditName(sub.displayName);
+    setEditJersey(sub.jerseyNumber ?? "");
+  }
+
+  function handleCancelEditSub() {
+    setEditingSubStatsId(null);
+    setEditName("");
+    setEditJersey("");
+  }
+
+  async function handleSaveEditSub(teamId: string) {
+    if (!editingSubStatsId || !editName.trim()) return;
+    setSavingEdit(true);
+
+    const res = await fetch(`/api/games/${game.id}/substitute`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statsId: editingSubStatsId, name: editName.trim(), jersey: editJersey.trim() || undefined }),
+    });
+
+    if (!res.ok) {
+      toast.error("Failed to update substitute");
+    } else {
+      const data = await res.json();
+      setSubstitutes((prev) => ({
+        ...prev,
+        [teamId]: (prev[teamId] ?? []).map((s) =>
+          s.statsId === editingSubStatsId
+            ? { ...s, displayName: data.substitute.substituteName, jerseyNumber: data.substitute.substituteJersey ?? null }
+            : s
+        ),
+      }));
+      toast.success("Substitute updated");
+      handleCancelEditSub();
+    }
+    setSavingEdit(false);
+  }
+
   async function handleScorekeeperBlur() {
     await fetch(`/api/games/${game.id}`, {
       method: "PUT",
@@ -500,9 +616,25 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between px-1">
           <span className="text-sm font-bold truncate">{team.name}</span>
-          <span className={cn("text-xs font-semibold tabular-nums", fouls >= 7 ? "text-red-500" : "text-muted-foreground")}>
-            {fouls} fouls
-          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => handleTeamFoul(team.id, -1)}
+              disabled={!game.isLive || fouls === 0}
+              className="w-5 h-5 rounded border text-xs font-bold text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+            >
+              −
+            </button>
+            <span className={cn("text-xs font-semibold tabular-nums min-w-[3rem] text-center", fouls >= 7 ? "text-red-500" : "text-muted-foreground")}>
+              {fouls} fouls
+            </span>
+            <button
+              onClick={() => handleTeamFoul(team.id, 1)}
+              disabled={!game.isLive}
+              className="w-5 h-5 rounded border text-xs font-bold text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+            >
+              +
+            </button>
+          </div>
         </div>
 
         <div className="rounded-xl border bg-card overflow-hidden flex flex-col">
@@ -510,6 +642,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
             {team.players.map((player) => {
               const stats = playerStats[player.id];
               const isSelected = selectedEntry?.type === "player" && selectedEntry.id === player.id;
+              const playerFouls = stats?.fouls ?? 0;
               return (
                 <button
                   key={player.id}
@@ -521,12 +654,16 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                     "px-2 py-2 rounded-lg text-xs font-medium transition-colors text-left",
                     isSelected
                       ? "bg-primary text-primary-foreground"
+                      : playerFouls >= 5
+                      ? "bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-foreground"
+                      : playerFouls === 4
+                      ? "bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-foreground"
                       : "bg-muted/50 hover:bg-muted text-foreground"
                   )}
                 >
                   <div>
                     {player.jerseyNumber !== null && (
-                      <span className="opacity-60 mr-1">#{player.jerseyNumber}</span>
+                      <span className="font-bold mr-1">#{player.jerseyNumber}</span>
                     )}
                     {player.displayName}
                   </div>
@@ -542,40 +679,95 @@ export function ScorekeeperBoard({ initialGame }: Props) {
             {subs.map((sub) => {
               const stats = subStats[sub.statsId];
               const isSelected = selectedEntry?.type === "sub" && selectedEntry.statsId === sub.statsId;
+              const isEditing = editingSubStatsId === sub.statsId;
+              const subFouls = stats?.fouls ?? 0;
               return (
-                <div key={sub.statsId} className="flex items-stretch gap-1">
-                  <button
-                    onClick={() => {
-                      setSelectedTeamId(team.id);
-                      setSelectedEntry(isSelected ? null : { type: "sub", statsId: sub.statsId });
-                    }}
-                    className={cn(
-                      "flex-1 px-2 py-2 rounded-lg text-xs font-medium transition-colors text-left",
-                      isSelected
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/50 hover:bg-muted text-foreground"
-                    )}
-                  >
-                    <div className="flex items-center gap-1">
-                      {sub.jerseyNumber !== null && (
-                        <span className="opacity-60">#{sub.jerseyNumber}</span>
+                <div key={sub.statsId} className="flex flex-col gap-0.5">
+                  <div className="flex items-stretch gap-1">
+                    <button
+                      onClick={() => {
+                        setSelectedTeamId(team.id);
+                        setSelectedEntry(isSelected ? null : { type: "sub", statsId: sub.statsId });
+                      }}
+                      className={cn(
+                        "flex-1 px-2 py-2 rounded-lg text-xs font-medium transition-colors text-left",
+                        isSelected
+                          ? "bg-primary text-primary-foreground"
+                          : subFouls >= 5
+                          ? "bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-foreground"
+                          : subFouls === 4
+                          ? "bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-foreground"
+                          : "bg-muted/50 hover:bg-muted text-foreground"
                       )}
-                      <span>{sub.displayName}</span>
-                      <span className={cn("text-xs", isSelected ? "opacity-60" : "text-muted-foreground")}>(sub)</span>
+                    >
+                      <div className="flex items-center gap-1">
+                        {sub.jerseyNumber !== null && (
+                          <span className="font-bold">#{sub.jerseyNumber}</span>
+                        )}
+                        <span>{sub.displayName}</span>
+                        <span className={cn("text-xs", isSelected ? "opacity-60" : "text-muted-foreground")}>(sub)</span>
+                      </div>
+                      <div className={cn("text-xs mt-0.5 font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
+                        {stats
+                          ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A · ${stats.fouls}F`
+                          : "0P · 0R · 0A · 0F"}
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => isEditing ? handleCancelEditSub() : handleStartEditSub(sub)}
+                      className={cn(
+                        "px-1.5 rounded-lg transition-colors",
+                        isEditing
+                          ? "text-foreground bg-muted"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      )}
+                      title="Edit substitute"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSub(sub.statsId, team.id)}
+                      className="px-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                      title="Remove substitute"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                  {isEditing && (
+                    <div className="flex flex-col gap-1 px-0.5">
+                      <input
+                        type="text"
+                        placeholder="Name *"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleSaveEditSub(team.id)}
+                        className="w-full px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                        autoFocus
+                      />
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          placeholder="#"
+                          value={editJersey}
+                          onChange={(e) => setEditJersey(e.target.value)}
+                          className="w-12 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        <button
+                          onClick={() => handleSaveEditSub(team.id)}
+                          disabled={!editName.trim() || savingEdit}
+                          className="flex-1 px-2 py-1.5 bg-primary text-primary-foreground text-xs rounded font-medium disabled:opacity-50"
+                        >
+                          {savingEdit ? "…" : "Save"}
+                        </button>
+                        <button
+                          onClick={handleCancelEditSub}
+                          className="p-1.5 border rounded hover:bg-muted text-muted-foreground"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
-                    <div className={cn("text-xs mt-0.5 font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
-                      {stats
-                        ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A · ${stats.fouls}F`
-                        : "0P · 0R · 0A · 0F"}
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => handleDeleteSub(sub.statsId, team.id)}
-                    className="px-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                    title="Remove substitute"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+                  )}
                 </div>
               );
             })}
@@ -850,6 +1042,49 @@ export function ScorekeeperBoard({ initialGame }: Props) {
 
         {/* Away Team */}
         {renderTeamPanel(game.awayTeam, game.awayTeamFouls)}
+      </div>
+
+      {/* Activity Log */}
+      <div className="rounded-xl border bg-card p-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Activity Log</p>
+        {activityLog.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-3">No events recorded yet</p>
+        ) : (
+          <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
+            {activityLog.map((entry) => {
+              const isPositive = entry.value >= 0;
+              const abs = Math.abs(entry.value);
+              const sign = isPositive ? "+" : "−";
+              const label =
+                entry.eventType === "POINT"
+                  ? `${sign}${abs} ${abs === 1 ? "PT" : "PTS"}`
+                  : entry.eventType === "REBOUND"
+                  ? `${sign}${abs} REB`
+                  : entry.eventType === "ASSIST"
+                  ? `${sign}${abs} AST`
+                  : `${sign}${abs} FOUL`;
+              const badgeCls =
+                entry.eventType === "POINT"
+                  ? "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400"
+                  : entry.eventType === "REBOUND"
+                  ? "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400"
+                  : entry.eventType === "ASSIST"
+                  ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                  : "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400";
+              return (
+                <div key={entry.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40 text-xs">
+                  <span className={cn("shrink-0 px-1.5 py-0.5 rounded font-bold tabular-nums", badgeCls)}>
+                    {label}
+                  </span>
+                  <span className="font-medium truncate">{entry.playerName}</span>
+                  <span className="text-muted-foreground shrink-0">·</span>
+                  <span className="text-muted-foreground truncate">{entry.teamName}</span>
+                  <span className="text-muted-foreground shrink-0 ml-auto">{entry.quarter === 1 ? "1H" : "2H"}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
