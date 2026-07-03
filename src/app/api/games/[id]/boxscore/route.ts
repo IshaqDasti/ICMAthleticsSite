@@ -47,38 +47,49 @@ export const PUT = withAuth(async (req, _user, { params }) => {
     ? await prisma.game.findUnique({ where: { id: params.id }, select: { status: true, homeTeamId: true, awayTeamId: true, seasonId: true } })
     : null;
 
+  const subs = substituteStats ?? [];
+
   await prisma.$transaction([
-    ...playerStats.map((s) =>
-      prisma.playerGameStats.upsert({
-        where: { gameId_playerId: { gameId: params.id, playerId: s.playerId } },
-        create: {
-          gameId: params.id,
-          playerId: s.playerId,
-          teamId: s.teamId,
-          points: s.points,
-          rebounds: s.rebounds,
-          assists: s.assists,
-          gamePlayed: s.gamePlayed,
-        },
-        update: {
-          points: s.points,
-          rebounds: s.rebounds,
-          assists: s.assists,
-          gamePlayed: s.gamePlayed,
-        },
-      })
-    ),
-    ...(substituteStats ?? []).map((s) =>
-      prisma.playerGameStats.update({
-        where: { id: s.substituteStatsId },
-        data: {
-          points: s.points,
-          rebounds: s.rebounds,
-          assists: s.assists,
-          gamePlayed: s.gamePlayed,
-        },
-      })
-    ),
+    ...(playerStats.length > 0
+      ? [
+          prisma.$executeRaw`
+            INSERT INTO player_game_stats ("id", "gameId", "playerId", "teamId", "points", "rebounds", "assists", "gamePlayed")
+            SELECT gen_random_uuid()::text, ${params.id}, u."playerId", u."teamId", u.points, u.rebounds, u.assists, u."gamePlayed"
+            FROM unnest(
+              ${playerStats.map((s) => s.playerId)}::text[],
+              ${playerStats.map((s) => s.teamId)}::text[],
+              ${playerStats.map((s) => s.points)}::int[],
+              ${playerStats.map((s) => s.rebounds)}::int[],
+              ${playerStats.map((s) => s.assists)}::int[],
+              ${playerStats.map((s) => s.gamePlayed)}::boolean[]
+            ) AS u("playerId", "teamId", points, rebounds, assists, "gamePlayed")
+            ON CONFLICT ("gameId", "playerId") DO UPDATE SET
+              points = EXCLUDED.points,
+              rebounds = EXCLUDED.rebounds,
+              assists = EXCLUDED.assists,
+              "gamePlayed" = EXCLUDED."gamePlayed"
+          `,
+        ]
+      : []),
+    ...(subs.length > 0
+      ? [
+          prisma.$executeRaw`
+            UPDATE player_game_stats p SET
+              points = u.points,
+              rebounds = u.rebounds,
+              assists = u.assists,
+              "gamePlayed" = u."gamePlayed"
+            FROM unnest(
+              ${subs.map((s) => s.substituteStatsId)}::text[],
+              ${subs.map((s) => s.points)}::int[],
+              ${subs.map((s) => s.rebounds)}::int[],
+              ${subs.map((s) => s.assists)}::int[],
+              ${subs.map((s) => s.gamePlayed)}::boolean[]
+            ) AS u(id, points, rebounds, assists, "gamePlayed")
+            WHERE p.id = u.id
+          `,
+        ]
+      : []),
     ...(scorekeeperOnly
       ? [
           prisma.game.update({
@@ -107,18 +118,14 @@ export const PUT = withAuth(async (req, _user, { params }) => {
     if (prevGame?.status !== "COMPLETED") {
       await finalizeGame(params.id);
     } else {
-      await recalculateTeams(
-        [prevGame.homeTeamId, prevGame.awayTeamId],
-        prevGame.seasonId
-      );
-      const allGameStats = await prisma.playerGameStats.findMany({
-        where: { gameId: params.id, playerId: { not: null } },
-        select: { playerId: true },
-      });
-      const playerIds = allGameStats
-        .map((s) => s.playerId)
-        .filter((id): id is string => id !== null);
-      await recalculatePlayerCareerStats(playerIds);
+      const playerIds = playerStats.map((s) => s.playerId);
+      await Promise.all([
+        recalculateTeams(
+          [prevGame.homeTeamId, prevGame.awayTeamId],
+          prevGame.seasonId
+        ),
+        recalculatePlayerCareerStats(playerIds),
+      ]);
     }
   }
 
@@ -128,6 +135,5 @@ export const PUT = withAuth(async (req, _user, { params }) => {
   revalidatePath("/teams", "layout");
   revalidatePath(`/games/${params.id}`);
 
-  const data = await getBoxScore(params.id);
-  return NextResponse.json(data);
+  return NextResponse.json({ ok: true });
 }, "SCOREKEEPER");

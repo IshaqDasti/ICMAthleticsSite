@@ -48,36 +48,24 @@ export async function recalculateTeams(teamIds: string[], seasonId: string) {
 export async function recalculatePlayerCareerStats(playerIds: string[]) {
   if (playerIds.length === 0) return;
 
-  const stats = await prisma.playerGameStats.groupBy({
-    by: ["playerId"],
-    where: { playerId: { in: playerIds }, gamePlayed: true },
-    _sum: { points: true, rebounds: true, assists: true },
-    _count: { gameId: true },
-  });
-
-  const statsMap = new Map(stats.map((s) => [s.playerId!, s]));
-
-  const updates = playerIds.map((playerId) => {
-    const s = statsMap.get(playerId);
-    return prisma.playerCareerStats.upsert({
-      where: { playerId },
-      create: {
-        playerId,
-        totalPoints: s?._sum.points ?? 0,
-        totalRebounds: s?._sum.rebounds ?? 0,
-        totalAssists: s?._sum.assists ?? 0,
-        gamesPlayed: s?._count.gameId ?? 0,
-      },
-      update: {
-        totalPoints: s?._sum.points ?? 0,
-        totalRebounds: s?._sum.rebounds ?? 0,
-        totalAssists: s?._sum.assists ?? 0,
-        gamesPlayed: s?._count.gameId ?? 0,
-      },
-    });
-  });
-
-  await prisma.$transaction(updates);
+  await prisma.$executeRaw`
+    INSERT INTO player_career_stats ("id", "playerId", "totalPoints", "totalRebounds", "totalAssists", "gamesPlayed", "updatedAt")
+    SELECT gen_random_uuid()::text, pid.id,
+      COALESCE(SUM(s.points), 0)::int,
+      COALESCE(SUM(s.rebounds), 0)::int,
+      COALESCE(SUM(s.assists), 0)::int,
+      COUNT(s.id)::int,
+      now()
+    FROM unnest(${playerIds}::text[]) AS pid(id)
+    LEFT JOIN player_game_stats s ON s."playerId" = pid.id AND s."gamePlayed" = true
+    GROUP BY pid.id
+    ON CONFLICT ("playerId") DO UPDATE SET
+      "totalPoints" = EXCLUDED."totalPoints",
+      "totalRebounds" = EXCLUDED."totalRebounds",
+      "totalAssists" = EXCLUDED."totalAssists",
+      "gamesPlayed" = EXCLUDED."gamesPlayed",
+      "updatedAt" = now()
+  `;
 }
 
 export async function unfinalizeGame(gameId: string) {

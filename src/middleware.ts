@@ -15,16 +15,8 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/admin/:path*",
-    "/api/teams/:path*",
-    "/api/players/:path*",
-    "/api/games/:path*",
-    "/api/seasons/:path*",
-    "/api/standings/recalculate",
-    "/api/announcements/:path*",
-    "/api/upload",
-    "/api/stats/export",
-    "/api/stats/recalculate-career",
-  ],
+  // API routes are intentionally excluded: withAuth() authenticates every
+  // protected handler itself, so running the Supabase session round-trip
+  // here would only add latency to public endpoints polled during live games.
+  matcher: ["/admin/:path*"],
 };

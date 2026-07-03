@@ -6,7 +6,7 @@ import { formatWinPct } from "@/lib/utils/stats";
 import { Trophy } from "lucide-react";
 
 export const metadata: Metadata = { title: "Teams" };
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export default async function TeamsPage() {
   const season = await getActiveSeason();

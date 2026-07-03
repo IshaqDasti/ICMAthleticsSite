@@ -6,6 +6,8 @@ import { ScheduleRefresher } from "@/components/schedule/ScheduleRefresher";
 import { prisma } from "@/lib/db/client";
 
 export const metadata: Metadata = { title: "Schedule" };
+// This page reads searchParams (week/team filters), so it is always
+// rendered per-request — ISR/revalidate cannot apply here.
 export const dynamic = "force-dynamic";
 
 export default async function SchedulePage({
