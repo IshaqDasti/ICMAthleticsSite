@@ -608,115 +608,187 @@ export function ScorekeeperBoard({ initialGame }: Props) {
 
   const canRecord = !!selectedEntry && game.isLive;
 
-  function renderTeamPanel(team: Team, fouls: number) {
+  function renderTeamPanel(team: Team, fouls: number, timeouts: number) {
     const subs = substitutes[team.id] ?? [];
     const isAddingSubHere = showAddSubTeamId === team.id;
+    const inBonus = fouls >= 7;
+    const inDoubleBonus = fouls >= 10;
 
     return (
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between px-1">
+      <div className="rounded-xl border bg-card p-2 flex flex-col gap-2 min-h-0 min-w-0">
+        <div className="flex items-center justify-between px-1 shrink-0">
           <span className="text-sm font-bold truncate">{team.name}</span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => handleTeamFoul(team.id, -1)}
-              disabled={!game.isLive || fouls === 0}
-              className="w-5 h-5 rounded border text-xs font-bold text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
-            >
-              −
-            </button>
-            <span className={cn("text-xs font-semibold tabular-nums min-w-[3rem] text-center", fouls >= 7 ? "text-red-500" : "text-muted-foreground")}>
-              {fouls} fouls
-            </span>
-            <button
-              onClick={() => handleTeamFoul(team.id, 1)}
-              disabled={!game.isLive}
-              className="w-5 h-5 rounded border text-xs font-bold text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
-            >
-              +
-            </button>
+        </div>
+
+        {/* Team fouls + timeouts */}
+        <div className="grid grid-cols-2 gap-1.5 shrink-0">
+          <div className="rounded-lg border bg-muted/40 px-2 py-1.5">
+            <div className="flex items-center justify-between gap-1 flex-wrap">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                Team Fouls
+              </span>
+              {inDoubleBonus ? (
+                <span className="text-[8px] font-bold text-white bg-red-800 rounded px-1 py-px whitespace-nowrap">
+                  BONUS · 2 SHOTS
+                </span>
+              ) : inBonus ? (
+                <span className="text-[8px] font-bold text-white bg-red-500 rounded px-1 py-px whitespace-nowrap">
+                  BONUS · 1&amp;1
+                </span>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-1 mt-1">
+              <span className={cn("text-lg font-black tabular-nums min-w-[1.25rem] leading-none", inBonus && "text-red-500")}>
+                {fouls}
+              </span>
+              <button
+                onClick={() => handleTeamFoul(team.id, -1)}
+                disabled={!game.isLive || fouls === 0}
+                className="w-6 h-6 rounded border text-xs font-bold text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                −
+              </button>
+              <button
+                onClick={() => handleTeamFoul(team.id, 1)}
+                disabled={!game.isLive}
+                className="flex-1 h-6 rounded bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                + Foul
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/40 px-2 py-1.5">
+            <div className="flex items-center">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                Timeouts Used
+              </span>
+            </div>
+            <div className="flex items-center gap-1 mt-1">
+              <span className="text-lg font-black tabular-nums min-w-[1.25rem] leading-none">{timeouts}</span>
+              <button
+                onClick={() => handleTimeout(team.id, -1)}
+                disabled={!game.isLive || timeouts === 0}
+                className="w-6 h-6 rounded border text-xs font-bold text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                −
+              </button>
+              <button
+                onClick={() => handleTimeout(team.id, 1)}
+                disabled={!game.isLive}
+                className="flex-1 h-6 rounded bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                +TO
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card overflow-hidden flex flex-col">
-          <div className="flex flex-col gap-1 p-1.5 overflow-y-auto max-h-[55vh]">
-            {team.players.map((player) => {
-              const stats = playerStats[player.id];
-              const isSelected = selectedEntry?.type === "player" && selectedEntry.id === player.id;
-              const playerFouls = stats?.fouls ?? 0;
-              return (
-                <button
-                  key={player.id}
-                  onClick={() => {
-                    setSelectedTeamId(team.id);
-                    setSelectedEntry(isSelected ? null : { type: "player", id: player.id });
-                  }}
-                  className={cn(
-                    "px-2 py-2 rounded-lg text-xs font-medium transition-colors text-left",
-                    isSelected
-                      ? "bg-primary text-primary-foreground"
-                      : playerFouls >= 5
-                      ? "bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-foreground"
-                      : playerFouls === 4
-                      ? "bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-foreground"
-                      : "bg-muted/50 hover:bg-muted text-foreground"
-                  )}
-                >
-                  <div>
-                    {player.jerseyNumber !== null && (
-                      <span className="font-bold mr-1">#{player.jerseyNumber}</span>
-                    )}
+        {/* Roster — 2-column grid, scrolls internally if it overflows */}
+        <div className="grid grid-cols-2 gap-1 content-start overflow-y-auto min-h-0 flex-1">
+          {team.players.map((player) => {
+            const stats = playerStats[player.id];
+            const isSelected = selectedEntry?.type === "player" && selectedEntry.id === player.id;
+            const playerFouls = stats?.fouls ?? 0;
+            return (
+              <button
+                key={player.id}
+                onClick={() => {
+                  setSelectedTeamId(team.id);
+                  setSelectedEntry(isSelected ? null : { type: "player", id: player.id });
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-left transition-colors min-w-0",
+                  isSelected
+                    ? "bg-primary text-primary-foreground ring-2 ring-primary"
+                    : playerFouls >= 5
+                    ? "bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-foreground"
+                    : playerFouls === 4
+                    ? "bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-foreground"
+                    : "bg-muted/50 hover:bg-muted text-foreground"
+                )}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium truncate">
+                    {player.jerseyNumber !== null && <span className="font-bold">#{player.jerseyNumber} </span>}
                     {player.displayName}
                   </div>
-                  <div className={cn("text-xs mt-0.5 font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
-                    {stats
-                      ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A · ${stats.fouls}F`
-                      : "0P · 0R · 0A · 0F"}
+                  <div className={cn("text-[10px] font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
+                    {stats ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A` : "0P · 0R · 0A"}
                   </div>
-                </button>
-              );
-            })}
+                </div>
+                <span
+                  className={cn(
+                    "shrink-0 text-[9px] font-bold rounded px-1 py-0.5 tabular-nums whitespace-nowrap",
+                    isSelected
+                      ? "bg-primary-foreground/20"
+                      : playerFouls >= 5
+                      ? "bg-red-200 text-red-800 dark:bg-red-900/60 dark:text-red-300"
+                      : playerFouls === 4
+                      ? "bg-yellow-200 text-yellow-800 dark:bg-yellow-900/60 dark:text-yellow-300"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {playerFouls} PF
+                </span>
+              </button>
+            );
+          })}
 
-            {subs.map((sub) => {
-              const stats = subStats[sub.statsId];
-              const isSelected = selectedEntry?.type === "sub" && selectedEntry.statsId === sub.statsId;
-              const isEditing = editingSubStatsId === sub.statsId;
-              const subFouls = stats?.fouls ?? 0;
-              return (
-                <div key={sub.statsId} className="flex flex-col gap-0.5">
-                  <div className="flex items-stretch gap-1">
-                    <button
-                      onClick={() => {
-                        setSelectedTeamId(team.id);
-                        setSelectedEntry(isSelected ? null : { type: "sub", statsId: sub.statsId });
-                      }}
+          {subs.map((sub) => {
+            const stats = subStats[sub.statsId];
+            const isSelected = selectedEntry?.type === "sub" && selectedEntry.statsId === sub.statsId;
+            const isEditing = editingSubStatsId === sub.statsId;
+            const subFouls = stats?.fouls ?? 0;
+            return (
+              <div key={sub.statsId} className={cn("flex flex-col gap-0.5 min-w-0", isEditing && "col-span-2")}>
+                <div className="flex items-stretch gap-0.5 min-w-0">
+                  <button
+                    onClick={() => {
+                      setSelectedTeamId(team.id);
+                      setSelectedEntry(isSelected ? null : { type: "sub", statsId: sub.statsId });
+                    }}
+                    className={cn(
+                      "flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-left transition-colors min-w-0",
+                      isSelected
+                        ? "bg-primary text-primary-foreground ring-2 ring-primary"
+                        : subFouls >= 5
+                        ? "bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-foreground"
+                        : subFouls === 4
+                        ? "bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-foreground"
+                        : "bg-muted/50 hover:bg-muted text-foreground"
+                    )}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium truncate">
+                        {sub.jerseyNumber !== null && <span className="font-bold">#{sub.jerseyNumber} </span>}
+                        {sub.displayName}
+                        <span className={cn("ml-1", isSelected ? "opacity-60" : "text-muted-foreground")}>(sub)</span>
+                      </div>
+                      <div className={cn("text-[10px] font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
+                        {stats ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A` : "0P · 0R · 0A"}
+                      </div>
+                    </div>
+                    <span
                       className={cn(
-                        "flex-1 px-2 py-2 rounded-lg text-xs font-medium transition-colors text-left",
+                        "shrink-0 text-[9px] font-bold rounded px-1 py-0.5 tabular-nums whitespace-nowrap",
                         isSelected
-                          ? "bg-primary text-primary-foreground"
+                          ? "bg-primary-foreground/20"
                           : subFouls >= 5
-                          ? "bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-foreground"
+                          ? "bg-red-200 text-red-800 dark:bg-red-900/60 dark:text-red-300"
                           : subFouls === 4
-                          ? "bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-foreground"
-                          : "bg-muted/50 hover:bg-muted text-foreground"
+                          ? "bg-yellow-200 text-yellow-800 dark:bg-yellow-900/60 dark:text-yellow-300"
+                          : "bg-muted text-muted-foreground"
                       )}
                     >
-                      <div className="flex items-center gap-1">
-                        {sub.jerseyNumber !== null && (
-                          <span className="font-bold">#{sub.jerseyNumber}</span>
-                        )}
-                        <span>{sub.displayName}</span>
-                        <span className={cn("text-xs", isSelected ? "opacity-60" : "text-muted-foreground")}>(sub)</span>
-                      </div>
-                      <div className={cn("text-xs mt-0.5 font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
-                        {stats
-                          ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A · ${stats.fouls}F`
-                          : "0P · 0R · 0A · 0F"}
-                      </div>
-                    </button>
+                      {subFouls} PF
+                    </span>
+                  </button>
+                  <div className="flex flex-col gap-0.5 shrink-0">
                     <button
-                      onClick={() => isEditing ? handleCancelEditSub() : handleStartEditSub(sub)}
+                      onClick={() => (isEditing ? handleCancelEditSub() : handleStartEditSub(sub))}
                       className={cn(
-                        "px-1.5 rounded-lg transition-colors",
+                        "flex-1 px-1 rounded transition-colors flex items-center justify-center",
                         isEditing
                           ? "text-foreground bg-muted"
                           : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -727,224 +799,197 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                     </button>
                     <button
                       onClick={() => handleDeleteSub(sub.statsId, team.id)}
-                      className="px-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                      className="flex-1 px-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors flex items-center justify-center"
                       title="Remove substitute"
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
-                  {isEditing && (
-                    <div className="flex flex-col gap-1 px-0.5">
-                      <input
-                        type="text"
-                        placeholder="Name *"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleSaveEditSub(team.id)}
-                        className="w-full px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                        autoFocus
-                      />
-                      <div className="flex gap-1">
-                        <input
-                          type="text"
-                          placeholder="#"
-                          value={editJersey}
-                          onChange={(e) => setEditJersey(e.target.value)}
-                          className="w-12 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                        <button
-                          onClick={() => handleSaveEditSub(team.id)}
-                          disabled={!editName.trim() || savingEdit}
-                          className="flex-1 px-2 py-1.5 bg-primary text-primary-foreground text-xs rounded font-medium disabled:opacity-50"
-                        >
-                          {savingEdit ? "…" : "Save"}
-                        </button>
-                        <button
-                          onClick={handleCancelEditSub}
-                          className="p-1.5 border rounded hover:bg-muted text-muted-foreground"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              );
-            })}
-          </div>
-
-          <div className="px-1.5 pb-1.5 border-t pt-1.5">
-            {isAddingSubHere ? (
-              <div className="flex flex-col gap-1">
-                <input
-                  type="text"
-                  placeholder="Name *"
-                  value={subName}
-                  onChange={(e) => setSubName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddSub()}
-                  className="w-full px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                  autoFocus
-                />
-                <div className="flex gap-1">
-                  <input
-                    type="text"
-                    placeholder="#"
-                    value={subJersey}
-                    onChange={(e) => setSubJersey(e.target.value)}
-                    className="w-12 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  <button
-                    onClick={handleAddSub}
-                    disabled={!subName.trim() || addingSub}
-                    className="flex-1 px-2 py-1.5 bg-primary text-primary-foreground text-xs rounded font-medium disabled:opacity-50"
-                  >
-                    {addingSub ? "…" : "Add"}
-                  </button>
-                  <button
-                    onClick={handleCancelAddSub}
-                    className="p-1.5 border rounded hover:bg-muted text-muted-foreground"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
+                {isEditing && (
+                  <div className="flex gap-1 px-0.5">
+                    <input
+                      type="text"
+                      placeholder="Name *"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSaveEditSub(team.id)}
+                      className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                      autoFocus
+                    />
+                    <input
+                      type="text"
+                      placeholder="#"
+                      value={editJersey}
+                      onChange={(e) => setEditJersey(e.target.value)}
+                      className="w-12 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <button
+                      onClick={() => handleSaveEditSub(team.id)}
+                      disabled={!editName.trim() || savingEdit}
+                      className="px-2 py-1.5 bg-primary text-primary-foreground text-xs rounded font-medium disabled:opacity-50"
+                    >
+                      {savingEdit ? "…" : "Save"}
+                    </button>
+                    <button
+                      onClick={handleCancelEditSub}
+                      className="p-1.5 border rounded hover:bg-muted text-muted-foreground"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
               </div>
-            ) : (
+            );
+          })}
+
+          {isAddingSubHere ? (
+            <div className="col-span-2 flex gap-1 rounded-lg border bg-muted/40 p-1.5">
+              <input
+                type="text"
+                placeholder="Name *"
+                value={subName}
+                onChange={(e) => setSubName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddSub()}
+                className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                autoFocus
+              />
+              <input
+                type="text"
+                placeholder="#"
+                value={subJersey}
+                onChange={(e) => setSubJersey(e.target.value)}
+                className="w-12 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              />
               <button
-                onClick={() => setShowAddSubTeamId(team.id)}
-                className="w-full py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors flex items-center justify-center gap-1"
+                onClick={handleAddSub}
+                disabled={!subName.trim() || addingSub}
+                className="px-2.5 py-1.5 bg-primary text-primary-foreground text-xs rounded font-medium disabled:opacity-50"
               >
-                <UserPlus className="w-3 h-3" />
-                Add Sub
+                {addingSub ? "…" : "Add"}
               </button>
-            )}
-          </div>
+              <button
+                onClick={handleCancelAddSub}
+                className="p-1.5 border rounded hover:bg-muted text-muted-foreground"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddSubTeamId(team.id)}
+              className="col-span-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border border-dashed transition-colors flex items-center justify-center gap-1"
+            >
+              <UserPlus className="w-3 h-3" />
+              Add Sub
+            </button>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {/* Score Display */}
-      <div className="rounded-xl border bg-card p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-muted-foreground">{game.currentQuarter === 1 ? "1st Half" : "2nd Half"}</span>
+    <div className="flex flex-col gap-2 lg:flex-1 lg:min-h-0">
+      {/* Top bar: scorekeeper, period, game controls */}
+      <div className="rounded-xl border bg-card px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-2 shrink-0">
+        <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+          <label className="text-xs font-bold whitespace-nowrap">
+            Scorekeeper <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={scorekeeperName}
+            onChange={(e) => setScorekeeperName(e.target.value)}
+            onBlur={handleScorekeeperBlur}
+            placeholder="Enter name…"
+            className={cn(
+              "flex-1 min-w-[120px] px-2.5 py-1.5 text-sm rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring",
+              !scorekeeperName.trim() && "border-red-400"
+            )}
+          />
+          {!scorekeeperName.trim() && (
+            <span className="text-[10px] font-bold text-red-500 whitespace-nowrap">Required</span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Period</span>
+          <span className="text-sm font-black whitespace-nowrap">
+            {game.currentQuarter === 1 ? "1st Half" : "2nd Half"}
+          </span>
+          {game.isLive && game.currentQuarter === 1 && (
+            <button
+              onClick={handleStartSecondHalf}
+              className="px-2.5 py-1.5 border rounded-lg text-xs font-medium hover:bg-muted flex items-center gap-1 whitespace-nowrap"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+              Start 2nd Half
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto">
           {game.isLive ? (
             <span className="flex items-center gap-1 text-xs font-bold text-red-600">
               <span className="live-dot w-1.5 h-1.5 rounded-full bg-red-600" />
               LIVE
             </span>
           ) : (
-            <span className="text-xs text-muted-foreground capitalize">{game.status.toLowerCase()}</span>
+            <span className="text-xs text-muted-foreground capitalize">
+              {game.status.toLowerCase().replace(/_/g, " ")}
+            </span>
           )}
-        </div>
-        <div className="flex items-center justify-between text-center">
-          <div className="flex-1">
-            <p className="text-xs font-medium text-muted-foreground truncate">{game.homeTeam.name}</p>
-            <p className="text-5xl font-black tabular-nums">{game.homeScore}</p>
-          </div>
-          <span className="text-2xl text-muted-foreground mx-2">–</span>
-          <div className="flex-1">
-            <p className="text-xs font-medium text-muted-foreground truncate">{game.awayTeam.name}</p>
-            <p className="text-5xl font-black tabular-nums">{game.awayScore}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Scorekeeper */}
-      <div className="rounded-xl border bg-card p-3">
-        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
-          Scorekeeper
-        </label>
-        <input
-          type="text"
-          value={scorekeeperName}
-          onChange={(e) => setScorekeeperName(e.target.value)}
-          onBlur={handleScorekeeperBlur}
-          placeholder="Enter scorekeeper name…"
-          className="w-full px-3 py-1.5 text-sm rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
-
-      {/* Game Controls */}
-      {!game.isLive ? (
-        <button
-          onClick={handleStartGame}
-          disabled={isStarting || game.status === "COMPLETED"}
-          className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl disabled:opacity-50"
-        >
-          {game.status === "COMPLETED" ? "Game Completed" : isStarting ? "Starting…" : "▶ Start Game"}
-        </button>
-      ) : (
-        <div className="flex gap-2">
-          {game.currentQuarter === 1 && (
+          {!game.isLive ? (
             <button
-              onClick={handleStartSecondHalf}
-              className="flex-1 py-2.5 border rounded-lg text-sm font-medium hover:bg-muted flex items-center justify-center gap-1"
+              onClick={handleStartGame}
+              disabled={isStarting || game.status === "COMPLETED"}
+              className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg disabled:opacity-50 whitespace-nowrap"
             >
-              <ChevronRight className="w-4 h-4" />
-              Start 2nd Half
+              {game.status === "COMPLETED" ? "Game Completed" : isStarting ? "Starting…" : "▶ Start Game"}
+            </button>
+          ) : (
+            <button
+              onClick={handleEndGame}
+              disabled={isEnding}
+              className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg disabled:opacity-50 flex items-center gap-1 whitespace-nowrap"
+            >
+              <CheckCircle className="w-4 h-4" />
+              {isEnding ? "Ending…" : "End Game"}
             </button>
           )}
-          <button
-            onClick={handleEndGame}
-            disabled={isEnding}
-            className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-1"
-          >
-            <CheckCircle className="w-4 h-4" />
-            {isEnding ? "Ending…" : "End Game"}
-          </button>
-        </div>
-      )}
-
-      {/* Timeouts */}
-      <div className="rounded-xl border bg-card px-3 py-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Timeouts (this half)</p>
-        <div className="grid grid-cols-2 gap-2">
-          {[game.homeTeam, game.awayTeam].map((team) => {
-            const isHome = team.id === game.homeTeam.id;
-            const count = isHome ? game.homeTeamTimeouts : game.awayTeamTimeouts;
-            return (
-              <div key={team.id} className="flex items-center gap-2">
-                <span className="text-xl font-black tabular-nums w-6 text-center shrink-0">{count}</span>
-                <div className="flex flex-col gap-1 flex-1 min-w-0">
-                  <p className="text-xs font-medium text-muted-foreground truncate">{team.name}</p>
-                  <div className="flex gap-1 w-full">
-                    <button
-                      onClick={() => handleTimeout(team.id, -1)}
-                      disabled={!game.isLive || count === 0}
-                      className="flex-1 py-1 rounded-md border text-xs font-bold text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      −1
-                    </button>
-                    <button
-                      onClick={() => handleTimeout(team.id, 1)}
-                      disabled={!game.isLive}
-                      className="flex-1 py-1 rounded-md bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      +TO
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
         </div>
       </div>
 
-      {/* 3-Column Main Area */}
-      <div className="grid grid-cols-[1fr_172px_1fr] gap-2 items-start">
-        {/* Home Team */}
-        {renderTeamPanel(game.homeTeam, game.homeTeamFouls)}
+      {/* Hero scoreboard */}
+      <div className="rounded-xl border bg-card px-4 py-1.5 grid grid-cols-[1fr_auto_1fr] items-center shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-4xl font-black tabular-nums leading-none">{game.homeScore}</span>
+          <span className="text-sm font-bold text-muted-foreground truncate">{game.homeTeam.name}</span>
+        </div>
+        <span className="text-xl text-muted-foreground px-3">–</span>
+        <div className="flex items-center gap-3 justify-end min-w-0">
+          <span className="text-sm font-bold text-muted-foreground truncate">{game.awayTeam.name}</span>
+          <span className="text-4xl font-black tabular-nums leading-none">{game.awayScore}</span>
+        </div>
+      </div>
 
-        {/* Center: Stat Buttons */}
-        <div className="flex flex-col gap-2">
-          {/* Selected player indicator */}
-          <div className="rounded-lg border bg-card px-2 py-2 text-center min-h-[48px] flex flex-col items-center justify-center">
+      {/* Main 3-column area: home | actions | away */}
+      <div className="grid gap-2 lg:grid-cols-[1fr_200px_1fr] lg:grid-rows-[minmax(0,1fr)] lg:flex-1 lg:min-h-0">
+        {renderTeamPanel(game.homeTeam, game.homeTeamFouls, game.homeTeamTimeouts)}
+
+        {/* Center action panel — applies to the selected player */}
+        <div className="rounded-xl border bg-card p-2 flex flex-col gap-1.5 min-h-0 lg:overflow-y-auto">
+          <div
+            className={cn(
+              "rounded-lg border px-2 py-1.5 text-center min-h-[52px] flex flex-col items-center justify-center shrink-0",
+              selectedEntry && "border-primary bg-primary/10"
+            )}
+          >
             {selectedEntry ? (
               <>
-                <p className="text-xs font-semibold leading-tight truncate w-full text-center">{selectedPlayerName}</p>
-                <p className="text-xs text-muted-foreground truncate w-full text-center">
+                <p className="text-xs font-bold leading-tight truncate w-full">{selectedPlayerName}</p>
+                <p className="text-[10px] text-muted-foreground truncate w-full">
                   {selectedTeamId === game.homeTeam.id ? game.homeTeam.name : game.awayTeam.name}
                 </p>
               </>
@@ -953,105 +998,99 @@ export function ScorekeeperBoard({ initialGame }: Props) {
             )}
           </div>
 
-          {/* Points */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 text-center">Points</p>
-            <div className="flex flex-col gap-1">
-              {[1, 2, 3].map((pts) => (
-                <button
-                  key={pts}
-                  onClick={() => handleStatEvent("POINT", pts)}
-                  disabled={!canRecord}
-                  className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-                >
-                  +{pts} PTS
-                </button>
-              ))}
-            </div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-center">Points</p>
+          <div className="grid grid-cols-3 gap-1">
+            {[1, 2, 3].map((pts) => (
+              <button
+                key={pts}
+                onClick={() => handleStatEvent("POINT", pts)}
+                disabled={!canRecord}
+                className="py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+              >
+                +{pts}
+              </button>
+            ))}
           </div>
 
-          {/* Other Stats */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 text-center">Stats</p>
-            <div className="flex flex-col gap-1">
-              <button
-                onClick={() => handleStatEvent("REBOUND", 1)}
-                disabled={!canRecord}
-                className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-              >
-                +1 REB
-              </button>
-              <button
-                onClick={() => handleStatEvent("ASSIST", 1)}
-                disabled={!canRecord}
-                className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-              >
-                +1 AST
-              </button>
-              <button
-                onClick={() => handleStatEvent("FOUL", 1)}
-                disabled={!canRecord}
-                className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-              >
-                +1 FOUL
-              </button>
-            </div>
-          </div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-center">Stats</p>
+          <button
+            onClick={() => handleStatEvent("REBOUND", 1)}
+            disabled={!canRecord}
+            className="w-full py-2.5 rounded-xl bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+          >
+            +1 REB
+          </button>
+          <button
+            onClick={() => handleStatEvent("ASSIST", 1)}
+            disabled={!canRecord}
+            className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+          >
+            +1 AST
+          </button>
+          <button
+            onClick={() => handleStatEvent("FOUL", 1)}
+            disabled={!canRecord}
+            className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+          >
+            +1 FOUL
+          </button>
 
-          {/* Deduct */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 text-center">Deduct</p>
-            <div className="grid grid-cols-2 gap-1">
-              {(
-                [
-                  { type: "POINT" as EventType, label: "−PTS", cls: "border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40" },
-                  { type: "REBOUND" as EventType, label: "−REB", cls: "border-green-400 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/40" },
-                  { type: "ASSIST" as EventType, label: "−AST", cls: "border-amber-400 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40" },
-                  { type: "FOUL" as EventType, label: "−FUL", cls: "border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40" },
-                ] as const
-              ).map(({ type, label, cls }) => (
-                <button
-                  key={type}
-                  onClick={() => handleStatEvent(type, -1)}
-                  disabled={!canRecord}
-                  className={cn(
-                    "py-2.5 rounded-lg border font-bold text-xs transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed",
-                    cls
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-center">Deduct</p>
+          <div className="grid grid-cols-2 gap-1">
+            {(
+              [
+                { type: "POINT" as EventType, label: "−PTS", cls: "border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40" },
+                { type: "REBOUND" as EventType, label: "−REB", cls: "border-green-400 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/40" },
+                { type: "ASSIST" as EventType, label: "−AST", cls: "border-amber-400 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40" },
+                { type: "FOUL" as EventType, label: "−FUL", cls: "border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40" },
+              ] as const
+            ).map(({ type, label, cls }) => (
+              <button
+                key={type}
+                onClick={() => handleStatEvent(type, -1)}
+                disabled={!canRecord}
+                className={cn(
+                  "py-2 rounded-lg border font-bold text-xs transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed",
+                  cls
+                )}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-
-          {/* Undo */}
-          {lastEvent && (
-            <button
-              onClick={handleUndo}
-              disabled={loading}
-              className="w-full py-2.5 border rounded-xl text-xs font-medium hover:bg-muted flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="truncate">
-                Undo {lastEvent.value > 0 ? "+" : "−"}{Math.abs(lastEvent.value)} {lastEvent.eventType}
-              </span>
-            </button>
-          )}
         </div>
 
-        {/* Away Team */}
-        {renderTeamPanel(game.awayTeam, game.awayTeamFouls)}
+        {renderTeamPanel(game.awayTeam, game.awayTeamFouls, game.awayTeamTimeouts)}
       </div>
 
-      {/* Activity Log */}
-      <div className="rounded-xl border bg-card p-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Activity Log</p>
-        {activityLog.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-3">No events recorded yet</p>
-        ) : (
-          <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
-            {activityLog.map((entry) => {
+      {/* Activity log */}
+      <div className="rounded-xl border bg-card px-3 py-2 shrink-0 flex flex-col lg:h-32">
+        <div className="flex items-center justify-between gap-2 shrink-0">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Activity Log</p>
+          <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-3 text-[10px] font-semibold text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm bg-yellow-400" /> 4 fouls
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm bg-red-500" /> 5+ fouls
+              </span>
+            </div>
+            <button
+              onClick={handleUndo}
+              disabled={!lastEvent || loading}
+              className="px-2.5 py-1 border rounded-lg text-xs font-semibold hover:bg-muted flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Undo last
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1 mt-1.5 overflow-y-auto flex-1 max-h-40 lg:max-h-none">
+          {activityLog.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-3">No events recorded yet</p>
+          ) : (
+            activityLog.map((entry) => {
               const isPositive = entry.value >= 0;
               const abs = Math.abs(entry.value);
               const sign = isPositive ? "+" : "−";
@@ -1072,7 +1111,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                   ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
                   : "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400";
               return (
-                <div key={entry.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40 text-xs">
+                <div key={entry.id} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-muted/40 text-xs shrink-0">
                   <span className={cn("shrink-0 px-1.5 py-0.5 rounded font-bold tabular-nums", badgeCls)}>
                     {label}
                   </span>
@@ -1082,9 +1121,9 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                   <span className="text-muted-foreground shrink-0 ml-auto">{entry.quarter === 1 ? "1H" : "2H"}</span>
                 </div>
               );
-            })}
-          </div>
-        )}
+            })
+          )}
+        </div>
       </div>
     </div>
   );

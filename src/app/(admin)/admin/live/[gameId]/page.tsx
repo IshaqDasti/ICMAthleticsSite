@@ -66,17 +66,22 @@ export default async function LiveGamePage({ params }: { params: { gameId: strin
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <Link
-        href="/admin/live"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
-      >
-        <ChevronLeft className="w-4 h-4" />
-        Back to game select
-      </Link>
-      <h1 className="text-xl font-bold mb-6">
-        {game.homeTeam.name} vs {game.awayTeam.name}
-      </h1>
+    // -m-6 / calc(100%+3rem) escapes the admin layout's p-6 so the board can
+    // use the full viewport height without scrolling on desktop
+    <div className="-m-6 p-3 flex flex-col gap-2 lg:h-[calc(100%+3rem)] lg:overflow-hidden">
+      <div className="flex items-center gap-2 shrink-0">
+        <Link
+          href="/admin/live"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground shrink-0"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Games
+        </Link>
+        <span className="text-muted-foreground">·</span>
+        <h1 className="text-sm font-bold truncate">
+          {game.homeTeam.name} vs {game.awayTeam.name}
+        </h1>
+      </div>
       <ScorekeeperBoard initialGame={initialGame} />
     </div>
   );

@@ -12,9 +12,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <AdminSidebar />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <AdminMobileNav />
         <div className="flex items-center justify-end p-4 border-b bg-card lg:hidden">
           <ThemeToggle />
