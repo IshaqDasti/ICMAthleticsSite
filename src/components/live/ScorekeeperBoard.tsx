@@ -47,6 +47,7 @@ interface ActivityLogEntry {
   id: string;
   eventType: EventType;
   playerName: string;
+  jerseyNumber: string | null;
   teamName: string;
   quarter: number;
   value: number;
@@ -169,14 +170,19 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       const allSubs = Object.values(subMap).flat();
       const log: ActivityLogEntry[] = eventsData.events.map((e: RawEvent) => {
         let playerName = "Unknown";
+        let jerseyNumber: string | null = null;
         if (e.playerId) {
-          playerName = allPlayers.find((p) => p.id === e.playerId)?.displayName ?? "Player";
+          const player = allPlayers.find((p) => p.id === e.playerId);
+          playerName = player?.displayName ?? "Player";
+          jerseyNumber = player?.jerseyNumber ?? null;
         } else if (e.substituteStatsId) {
-          playerName = allSubs.find((s) => s.statsId === e.substituteStatsId)?.displayName ?? "Sub";
+          const sub = allSubs.find((s) => s.statsId === e.substituteStatsId);
+          playerName = sub?.displayName ?? "Sub";
+          jerseyNumber = sub?.jerseyNumber ?? null;
         }
         const isHome = e.teamId === initialGame.homeTeam.id;
         const teamName = isHome ? initialGame.homeTeam.name : initialGame.awayTeam.name;
-        return { id: e.id, eventType: e.eventType as EventType, playerName, teamName, quarter: e.quarter, value: e.value };
+        return { id: e.id, eventType: e.eventType as EventType, playerName, jerseyNumber, teamName, quarter: e.quarter, value: e.value };
       });
       setActivityLog(log);
     }
@@ -419,10 +425,12 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       toast.error("Failed to record stat");
     } else {
       const data = await res.json();
-      const playerName =
+      const selectedPlayer =
         selectedEntry.type === "player"
-          ? (selectedTeam.players.find((p) => p.id === selectedEntry.id)?.displayName ?? "Player")
-          : ((substitutes[selectedTeamId] ?? []).find((s) => s.statsId === selectedEntry.statsId)?.displayName ?? "Sub");
+          ? selectedTeam.players.find((p) => p.id === selectedEntry.id)
+          : (substitutes[selectedTeamId] ?? []).find((s) => s.statsId === selectedEntry.statsId);
+      const playerName = selectedPlayer?.displayName ?? (selectedEntry.type === "player" ? "Player" : "Sub");
+      const jerseyNumber = selectedPlayer?.jerseyNumber ?? null;
       setLastEvent({
         id: data.event.id,
         eventType: type,
@@ -434,7 +442,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         value,
       });
       setActivityLog((prev) => [
-        { id: data.event.id, eventType: type, playerName, teamName: selectedTeam.name, quarter: game.currentQuarter, value },
+        { id: data.event.id, eventType: type, playerName, jerseyNumber, teamName: selectedTeam.name, quarter: game.currentQuarter, value },
         ...prev,
       ]);
     }
@@ -1115,7 +1123,10 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                   <span className={cn("shrink-0 px-1.5 py-0.5 rounded font-bold tabular-nums", badgeCls)}>
                     {label}
                   </span>
-                  <span className="font-medium truncate">{entry.playerName}</span>
+                  <span className="font-medium truncate">
+                    {entry.jerseyNumber !== null && <span className="font-bold">#{entry.jerseyNumber} </span>}
+                    {entry.playerName}
+                  </span>
                   <span className="text-muted-foreground shrink-0">·</span>
                   <span className="text-muted-foreground truncate">{entry.teamName}</span>
                   <span className="text-muted-foreground shrink-0 ml-auto">{entry.quarter === 1 ? "1H" : "2H"}</span>
