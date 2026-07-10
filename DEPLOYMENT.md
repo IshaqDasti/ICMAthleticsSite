@@ -16,7 +16,7 @@
    - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY`
 3. Go to **Settings → Database → Connection string**:
-   - Copy **Transaction pooler** (port 6543) → `DATABASE_URL`
+   - Copy **Transaction pooler** (port 6543) → `DATABASE_URL`, and append `?pgbouncer=true` (Prisma requires it through PgBouncer, otherwise "prepared statement already exists" errors)
    - Copy **Direct connection** (port 5432) → `DIRECT_URL`
 
 ### Enable Supabase Realtime
@@ -45,9 +45,13 @@ To create the first Super Admin:
 2. In Supabase SQL Editor:
 
 ```sql
-INSERT INTO users ("supabaseId", email, name, role)
-VALUES ('<supabase-user-id>', 'admin@icmathletics.com', 'Admin', 'SUPER_ADMIN');
+INSERT INTO users ("id", "supabaseId", email, name, role, "updatedAt")
+VALUES (gen_random_uuid()::text, '<supabase-user-id>', 'admin@icmathletics.com',
+        'Admin', 'SUPER_ADMIN', now());
 ```
+
+Note: `"id"` and `"updatedAt"` must be supplied explicitly — their Prisma defaults
+(`cuid()`, `@updatedAt`) are client-side only and do not exist at the database level.
 
 ---
 
@@ -98,7 +102,10 @@ npm run db:seed
 
 In Supabase → **Authentication → URL Configuration**:
 - Add Site URL: `https://your-app.vercel.app`
-- Add Redirect URL: `https://your-app.vercel.app/auth/callback`
+- Add Redirect URL: `https://your-app.vercel.app/callback`
+
+(The callback handler lives at `src/app/(auth)/callback/route.ts`; route groups add
+no URL segment, so the real path is `/callback`, not `/auth/callback`.)
 
 ---
 
