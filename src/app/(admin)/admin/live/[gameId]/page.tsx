@@ -11,6 +11,14 @@ export default async function LiveGamePage({ params }: { params: { gameId: strin
       homeTeam: {
         include: {
           players: {
+            // Injured players are off the board unless they already have
+            // stats in this game (injured mid-game — keep them undoable)
+            where: {
+              OR: [
+                { isInjured: false },
+                { playerGameStats: { some: { gameId: params.gameId } } },
+              ],
+            },
             select: { id: true, displayName: true, jerseyNumber: true },
             orderBy: { lastName: "asc" },
           },
@@ -19,6 +27,12 @@ export default async function LiveGamePage({ params }: { params: { gameId: strin
       awayTeam: {
         include: {
           players: {
+            where: {
+              OR: [
+                { isInjured: false },
+                { playerGameStats: { some: { gameId: params.gameId } } },
+              ],
+            },
             select: { id: true, displayName: true, jerseyNumber: true },
             orderBy: { lastName: "asc" },
           },

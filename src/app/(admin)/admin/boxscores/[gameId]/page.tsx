@@ -11,6 +11,14 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
       homeTeam: {
         include: {
           players: {
+            // Injured players stay editable in games they already have a
+            // stat row for; otherwise they don't get an empty row
+            where: {
+              OR: [
+                { isInjured: false },
+                { playerGameStats: { some: { gameId: params.gameId } } },
+              ],
+            },
             select: { id: true, firstName: true, lastName: true, jerseyNumber: true },
             orderBy: { lastName: "asc" },
           },
@@ -19,6 +27,12 @@ export default async function BoxScoreEditorPage({ params }: { params: { gameId:
       awayTeam: {
         include: {
           players: {
+            where: {
+              OR: [
+                { isInjured: false },
+                { playerGameStats: { some: { gameId: params.gameId } } },
+              ],
+            },
             select: { id: true, firstName: true, lastName: true, jerseyNumber: true },
             orderBy: { lastName: "asc" },
           },

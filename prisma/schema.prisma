@@ -131,6 +131,7 @@ model Player {
   phone           String?
   dateOfBirth     DateTime?
   instagramHandle String?
+  isInjured       Boolean   @default(false)
 
   team            Team?             @relation(fields: [teamId], references: [id])
   playerGameStats PlayerGameStats[]

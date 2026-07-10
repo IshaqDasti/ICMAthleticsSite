@@ -71,7 +71,14 @@ export default async function AdminPlayersPage({
               <tr key={p.id} className="hover:bg-muted/30">
                 <td className="px-4 py-3 text-muted-foreground">{p.jerseyNumber ?? "—"}</td>
                 <td className="px-4 py-3">
-                  <p className="font-medium">{p.displayName}</p>
+                  <p className="font-medium">
+                    {p.displayName}
+                    {p.isInjured && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-destructive/10 text-destructive">
+                        Injured
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-muted-foreground">{p.firstName} {p.lastName}</p>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{p.team?.name ?? "No team"}</td>

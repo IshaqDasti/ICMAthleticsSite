@@ -126,6 +126,11 @@ export default async function TeamPage({ params }: { params: { slug: string } })
                       >
                         {player.firstName} {player.lastName}
                       </Link>
+                      {player.isInjured && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-destructive/10 text-destructive">
+                          Injured
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right text-muted-foreground">{gp}</td>
                     <td className="px-3 py-2 text-right">

@@ -15,6 +15,7 @@ export default function EditPlayerPage() {
     firstName: "", lastName: "", displayName: "",
     jerseyNumber: "", teamId: "", email: "", instagramHandle: "",
   });
+  const [isInjured, setIsInjured] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -30,6 +31,7 @@ export default function EditPlayerPage() {
         email: player.email ?? "",
         instagramHandle: player.instagramHandle ?? "",
       });
+      setIsInjured(player.isInjured ?? false);
       setTeams(t);
       setFetching(false);
     });
@@ -45,6 +47,7 @@ export default function EditPlayerPage() {
         ...form,
         jerseyNumber: form.jerseyNumber || null,
         teamId: form.teamId || null,
+        isInjured,
       }),
     });
     if (res.ok) {
@@ -111,6 +114,15 @@ export default function EditPlayerPage() {
             {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
+        <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isInjured}
+            onChange={(e) => setIsInjured(e.target.checked)}
+            className="w-4 h-4 rounded border accent-primary"
+          />
+          Injured — keep on team page but hide from live scoring and box scores
+        </label>
         <div className="flex gap-3 pt-2">
           <button
             type="submit"

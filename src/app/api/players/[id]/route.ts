@@ -26,6 +26,7 @@ export const PUT = withAuth(async (req, _user, { params }) => {
       ...(body.photoUrl !== undefined && { photoUrl: body.photoUrl }),
       ...(body.email !== undefined && { email: body.email }),
       ...(body.instagramHandle !== undefined && { instagramHandle: body.instagramHandle }),
+      ...(body.isInjured !== undefined && { isInjured: body.isInjured }),
     },
   });
   return NextResponse.json({ player });
