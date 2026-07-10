@@ -98,7 +98,7 @@ export function StandingsTable({ rows: initialRows }: Props) {
               key={row.teamId}
               className={cn(
                 "transition-colors hover:bg-muted/30",
-                i === 7 && "border-t-2 border-dashed border-muted-foreground/40"
+                i === 8 && "border-t-2 border-dashed border-muted-foreground/40"
               )}
             >
               <td className="px-3 py-3 text-center font-medium text-muted-foreground">
