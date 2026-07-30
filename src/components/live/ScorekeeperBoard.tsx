@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { RotateCcw, ChevronRight, CheckCircle, UserPlus, X, Trash2, Pencil } from "lucide-react";
+import { RotateCcw, ChevronRight, CheckCircle, UserPlus, X, Trash2, Pencil, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Team {
@@ -32,22 +32,12 @@ interface GameState {
   scorekeeperName: string | null;
 }
 
-interface GameEvent {
-  id: string;
-  eventType: string;
-  playerId: string | null;
-  teamId: string | null;
-  quarter: number;
-  playerName?: string;
-  teamName?: string;
-  value: number;
-}
-
 interface ActivityLogEntry {
   id: string;
   eventType: EventType;
   playerName: string;
   jerseyNumber: string | null;
+  teamId: string | null;
   teamName: string;
   quarter: number;
   value: number;
@@ -68,6 +58,7 @@ interface PlayerStat {
   rebounds: number;
   assists: number;
   fouls: number;
+  gamePlayed?: boolean;
 }
 
 interface SubstituteEntry {
@@ -92,17 +83,20 @@ export function ScorekeeperBoard({ initialGame }: Props) {
   const [scorekeeperName, setScorekeeperName] = useState(initialGame.scorekeeperName ?? "");
   const [selectedTeamId, setSelectedTeamId] = useState<string>(initialGame.homeTeam.id);
   const [selectedEntry, setSelectedEntry] = useState<SelectedEntry>(null);
-  const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
+  const [undoing, setUndoing] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
   const [playerStats, setPlayerStats] = useState<Record<string, PlayerStat>>({});
   const [subStats, setSubStats] = useState<Record<string, PlayerStat>>({});
   const [substitutes, setSubstitutes] = useState<Record<string, SubstituteEntry[]>>({});
-  const [showAddSubTeamId, setShowAddSubTeamId] = useState<string | null>(null);
+  const [manageTeamId, setManageTeamId] = useState<string | null>(null);
+  const [benchedIds, setBenchedIds] = useState<Set<string>>(new Set());
+  const [showAddSubForm, setShowAddSubForm] = useState(false);
   const [subName, setSubName] = useState("");
   const [subJersey, setSubJersey] = useState("");
   const [addingSub, setAddingSub] = useState(false);
+  const [attendanceLoading, setAttendanceLoading] = useState<string | null>(null);
   const [editingSubStatsId, setEditingSubStatsId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editJersey, setEditJersey] = useState("");
@@ -127,6 +121,43 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     return allSubs.find((s) => s.statsId === selectedEntry.statsId)?.displayName ?? "Sub";
   })();
 
+  // Court/bench is a client-side view concern (which entries show on the main board),
+  // persisted per game in localStorage. Default: everyone on court. We store the BENCHED
+  // set, so newly added players/subs default to on court automatically.
+  const courtStorageKey = `icm-bench-${game.id}`;
+  const subKey = (statsId: string) => `sub:${statsId}`;
+  const isBenched = (key: string) => benchedIds.has(key);
+
+  // "Played" = server-owned attendance (gamePlayed) OR any recorded stat (covers the
+  // optimistic window before a refetch). Independent of court/bench.
+  const hasStats = (s: PlayerStat | undefined) =>
+    !!s && (s.points > 0 || s.rebounds > 0 || s.assists > 0 || s.fouls > 0);
+  const playerPlayed = (playerId: string) => {
+    const s = playerStats[playerId];
+    return !!s && (s.gamePlayed || hasStats(s));
+  };
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(courtStorageKey);
+      if (raw) setBenchedIds(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* ignore malformed / unavailable storage */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id]);
+
+  const persistBench = useCallback(
+    (next: Set<string>) => {
+      try {
+        localStorage.setItem(courtStorageKey, JSON.stringify(Array.from(next)));
+      } catch {
+        /* ignore */
+      }
+    },
+    [courtStorageKey]
+  );
+
   const fetchStats = useCallback(async () => {
     const [statsRes, eventsRes] = await Promise.all([
       fetch(`/api/games/${game.id}/stats`),
@@ -140,9 +171,9 @@ export function ScorekeeperBoard({ initialGame }: Props) {
 
     for (const s of data.stats) {
       if (s.playerId) {
-        pMap[s.playerId] = { points: s.points, rebounds: s.rebounds, assists: s.assists, fouls: s.fouls ?? 0 };
+        pMap[s.playerId] = { points: s.points, rebounds: s.rebounds, assists: s.assists, fouls: s.fouls ?? 0, gamePlayed: s.gamePlayed ?? false };
       } else if (s.substituteName) {
-        sMap[s.id] = { points: s.points, rebounds: s.rebounds, assists: s.assists, fouls: s.fouls ?? 0 };
+        sMap[s.id] = { points: s.points, rebounds: s.rebounds, assists: s.assists, fouls: s.fouls ?? 0, gamePlayed: s.gamePlayed ?? true };
         if (!subMap[s.teamId]) subMap[s.teamId] = [];
         subMap[s.teamId].push({
           statsId: s.id,
@@ -182,7 +213,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         }
         const isHome = e.teamId === initialGame.homeTeam.id;
         const teamName = isHome ? initialGame.homeTeam.name : initialGame.awayTeam.name;
-        return { id: e.id, eventType: e.eventType as EventType, playerName, jerseyNumber, teamName, quarter: e.quarter, value: e.value };
+        return { id: e.id, eventType: e.eventType as EventType, playerName, jerseyNumber, teamId: e.teamId, teamName, quarter: e.quarter, value: e.value };
       });
       setActivityLog(log);
     }
@@ -218,6 +249,42 @@ export function ScorekeeperBoard({ initialGame }: Props) {
 
     return () => { supabase.removeChannel(channel); };
   }, [game.id]);
+
+  // Accidental-exit protection — active only while the game is live.
+  // Layer 1: browser-level (refresh / tab close / back-forward). Browsers show their
+  // own native dialog and don't allow a custom message here, by design.
+  useEffect(() => {
+    if (!game.isLive) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [game.isLive]);
+
+  // Layer 2: in-app navigation (admin sidebar / any internal link). beforeunload does
+  // not fire for client-side route changes, so intercept anchor clicks that leave this
+  // page and confirm. Live scoring is persisted server-side, so this is a guard against
+  // an accidental tap, not against data loss.
+  useEffect(() => {
+    if (!game.isLive) return;
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const anchor = (e.target as HTMLElement | null)?.closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#") || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
+      const dest = new URL(href, window.location.href);
+      if (dest.origin !== window.location.origin || dest.pathname === window.location.pathname) return;
+      if (!window.confirm("A game is in progress. Leave this page? Your scoring is saved, but you'll stop keeping the book here.")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [game.isLive]);
 
   async function handleStartGame() {
     setIsStarting(true);
@@ -431,56 +498,69 @@ export function ScorekeeperBoard({ initialGame }: Props) {
           : (substitutes[selectedTeamId] ?? []).find((s) => s.statsId === selectedEntry.statsId);
       const playerName = selectedPlayer?.displayName ?? (selectedEntry.type === "player" ? "Player" : "Sub");
       const jerseyNumber = selectedPlayer?.jerseyNumber ?? null;
-      setLastEvent({
-        id: data.event.id,
-        eventType: type,
-        playerId: selectedEntry.type === "player" ? selectedEntry.id : null,
-        teamId: selectedTeamId,
-        quarter: game.currentQuarter,
-        playerName,
-        teamName: selectedTeam.name,
-        value,
-      });
       setActivityLog((prev) => [
-        { id: data.event.id, eventType: type, playerName, jerseyNumber, teamName: selectedTeam.name, quarter: game.currentQuarter, value },
+        { id: data.event.id, eventType: type, playerName, jerseyNumber, teamId: selectedTeamId, teamName: selectedTeam.name, quarter: game.currentQuarter, value },
         ...prev,
       ]);
     }
   }
 
-  async function handleUndo() {
-    if (!lastEvent) return;
-    setLoading(true);
-    const res = await fetch(`/api/games/${game.id}/events/${lastEvent.id}`, {
-      method: "DELETE",
+  function toggleLogSelect(id: string) {
+    setSelectedLogIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
-    if (!res.ok) {
-      toast.error("Failed to undo");
-    } else {
-      toast.success("Action undone");
-      const isHome = lastEvent.teamId === game.homeTeam.id;
-      if (lastEvent.eventType === "POINT") {
-        setGame((prev) => ({
-          ...prev,
-          homeScore: isHome ? prev.homeScore - lastEvent.value : prev.homeScore,
-          awayScore: !isHome ? prev.awayScore - lastEvent.value : prev.awayScore,
-        }));
+  }
+
+  // Reverse any combination of activity-log entries. Order-independent: each is a
+  // soft-delete on the server (compensating decrements), and we re-hydrate player /
+  // sub / team-foul state from the DB via fetchStats afterward. Only the game score
+  // isn't returned by fetchStats, so we adjust it optimistically here (POINT only).
+  const undoEntries = useCallback(
+    async (entries: ActivityLogEntry[]) => {
+      if (entries.length === 0 || undoing) return;
+      setUndoing(true);
+      let homeDelta = 0;
+      let awayDelta = 0;
+      let failures = 0;
+      for (const entry of entries) {
+        const res = await fetch(`/api/games/${game.id}/events/${entry.id}`, { method: "DELETE" });
+        if (!res.ok) {
+          failures += 1;
+          continue;
+        }
+        if (entry.eventType === "POINT") {
+          if (entry.teamId === game.homeTeam.id) homeDelta -= entry.value;
+          else awayDelta -= entry.value;
+        }
       }
-      if (lastEvent.eventType === "FOUL") {
-        setGame((prev) => ({
-          ...prev,
-          homeTeamFouls: isHome ? prev.homeTeamFouls - lastEvent.value : prev.homeTeamFouls,
-          awayTeamFouls: !isHome ? prev.awayTeamFouls - lastEvent.value : prev.awayTeamFouls,
-        }));
+      if (homeDelta !== 0 || awayDelta !== 0) {
+        setGame((prev) => ({ ...prev, homeScore: prev.homeScore + homeDelta, awayScore: prev.awayScore + awayDelta }));
       }
-      setLastEvent(null);
-      fetchStats();
-    }
-    setLoading(false);
+      setSelectedEntry(null);
+      setSelectedLogIds(new Set());
+      await fetchStats();
+      setUndoing(false);
+      if (failures > 0) {
+        toast.error(`Could not undo ${failures} ${failures === 1 ? "action" : "actions"}`);
+      } else {
+        toast.success(entries.length > 1 ? `${entries.length} actions undone` : "Action undone");
+      }
+    },
+    [undoing, game.id, game.homeTeam.id, fetchStats]
+  );
+
+  function handleUndoSelected() {
+    const ids = selectedLogIds;
+    // process in the log's current (newest-first) order for consistent derived state
+    const entries = activityLog.filter((e) => ids.has(e.id));
+    undoEntries(entries);
   }
 
   async function handleAddSub() {
-    if (!subName.trim() || !showAddSubTeamId) return;
+    if (!subName.trim() || !manageTeamId) return;
     setAddingSub(true);
 
     const res = await fetch(`/api/games/${game.id}/substitute`, {
@@ -489,7 +569,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       body: JSON.stringify({
         name: subName.trim(),
         jersey: subJersey.trim() || undefined,
-        teamId: showAddSubTeamId,
+        teamId: manageTeamId,
       }),
     });
 
@@ -497,6 +577,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       toast.error("Failed to add substitute");
     } else {
       const data = await res.json();
+      const teamId = manageTeamId;
       const newSub: SubstituteEntry = {
         statsId: data.substitute.id,
         displayName: data.substitute.substituteName,
@@ -504,13 +585,13 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       };
       setSubstitutes((prev) => ({
         ...prev,
-        [showAddSubTeamId]: [...(prev[showAddSubTeamId] ?? []), newSub],
+        [teamId]: [...(prev[teamId] ?? []), newSub],
       }));
       setSubStats((prev) => ({
         ...prev,
-        [newSub.statsId]: { points: 0, rebounds: 0, assists: 0, fouls: 0 },
+        [newSub.statsId]: { points: 0, rebounds: 0, assists: 0, fouls: 0, gamePlayed: true },
       }));
-      setShowAddSubTeamId(null);
+      setShowAddSubForm(false);
       setSubName("");
       setSubJersey("");
       toast.success(`${newSub.displayName} added as substitute`);
@@ -519,9 +600,73 @@ export function ScorekeeperBoard({ initialGame }: Props) {
   }
 
   function handleCancelAddSub() {
-    setShowAddSubTeamId(null);
+    setShowAddSubForm(false);
     setSubName("");
     setSubJersey("");
+  }
+
+  function openManageTeam(teamId: string) {
+    setManageTeamId(teamId);
+    setShowAddSubForm(false);
+    setSubName("");
+    setSubJersey("");
+    handleCancelEditSub();
+  }
+
+  function closeManageTeam() {
+    setManageTeamId(null);
+    setShowAddSubForm(false);
+    setSubName("");
+    setSubJersey("");
+    handleCancelEditSub();
+  }
+
+  // Move an entry (rostered player id, or `sub:<statsId>`) between court and bench.
+  // Purely client-side view state; benching the selected entry clears the selection.
+  function setEntryBenched(key: string, benched: boolean) {
+    setBenchedIds((prev) => {
+      const next = new Set(prev);
+      if (benched) next.add(key);
+      else next.delete(key);
+      persistBench(next);
+      return next;
+    });
+    if (benched) {
+      if (selectedEntry?.type === "player" && selectedEntry.id === key) setSelectedEntry(null);
+      if (selectedEntry?.type === "sub" && subKey(selectedEntry.statsId) === key) setSelectedEntry(null);
+    }
+  }
+
+  // Manual attendance: mark a rostered player present/absent. Writes gamePlayed server-side
+  // (which feeds career gamesPlayed). Absent is only allowed when they have no recorded stats.
+  async function toggleAttendance(teamId: string, playerId: string) {
+    if (attendanceLoading) return;
+    const stat = playerStats[playerId];
+    const present = playerPlayed(playerId);
+    if (present && hasStats(stat)) return; // recorded stats — attendance is implied and locked
+    const next = !present;
+    setAttendanceLoading(playerId);
+    const res = await fetch(`/api/games/${game.id}/attendance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, teamId, present: next }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "Failed to update attendance");
+    } else {
+      setPlayerStats((prev) => {
+        const nextMap = { ...prev };
+        if (next) {
+          const cur = nextMap[playerId] ?? { points: 0, rebounds: 0, assists: 0, fouls: 0 };
+          nextMap[playerId] = { ...cur, gamePlayed: true };
+        } else {
+          delete nextMap[playerId];
+        }
+        return nextMap;
+      });
+    }
+    setAttendanceLoading(null);
   }
 
   function handleStartEditSub(sub: SubstituteEntry) {
@@ -610,6 +755,13 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       delete next[statsId];
       return next;
     });
+    setBenchedIds((prev) => {
+      if (!prev.has(subKey(statsId))) return prev;
+      const next = new Set(prev);
+      next.delete(subKey(statsId));
+      persistBench(next);
+      return next;
+    });
 
     toast.success("Substitute removed");
   }
@@ -618,14 +770,79 @@ export function ScorekeeperBoard({ initialGame }: Props) {
 
   function renderTeamPanel(team: Team, fouls: number, timeouts: number) {
     const subs = substitutes[team.id] ?? [];
-    const isAddingSubHere = showAddSubTeamId === team.id;
     const inBonus = fouls >= 7;
     const inDoubleBonus = fouls >= 10;
+    const activePlayers = team.players.filter((p) => !isBenched(p.id));
+    const activeSubs = subs.filter((s) => !isBenched(subKey(s.statsId)));
+    const benchCount = team.players.length + subs.length - activePlayers.length - activeSubs.length;
+    // Subs are created as gamePlayed; rostered players count when marked present or after a stat.
+    const playedCount = team.players.filter((p) => playerPlayed(p.id)).length + subs.length;
+
+    const courtCard = (opts: {
+      key: string;
+      selected: boolean;
+      onSelect: () => void;
+      jerseyNumber: string | null;
+      name: string;
+      isSub: boolean;
+      stats?: PlayerStat;
+    }) => {
+      const f = opts.stats?.fouls ?? 0;
+      return (
+        <button
+          key={opts.key}
+          onClick={opts.onSelect}
+          className={cn(
+            "flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-left transition-colors min-w-0",
+            opts.selected
+              ? "bg-primary text-primary-foreground ring-2 ring-primary"
+              : f >= 5
+              ? "bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-foreground"
+              : f === 4
+              ? "bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-foreground"
+              : "bg-muted/50 hover:bg-muted text-foreground"
+          )}
+        >
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium truncate">
+              {opts.jerseyNumber !== null && <span className="font-bold">#{opts.jerseyNumber} </span>}
+              {opts.name}
+              {opts.isSub && (
+                <span className={cn("ml-1", opts.selected ? "opacity-60" : "text-muted-foreground")}>(sub)</span>
+              )}
+            </div>
+            <div className={cn("text-[10px] font-normal tabular-nums", opts.selected ? "opacity-75" : "opacity-50")}>
+              {opts.stats ? `${opts.stats.points}P · ${opts.stats.rebounds}R · ${opts.stats.assists}A` : "0P · 0R · 0A"}
+            </div>
+          </div>
+          <span
+            className={cn(
+              "shrink-0 text-[9px] font-bold rounded px-1 py-0.5 tabular-nums whitespace-nowrap",
+              opts.selected
+                ? "bg-primary-foreground/20"
+                : f >= 5
+                ? "bg-red-200 text-red-800 dark:bg-red-900/60 dark:text-red-300"
+                : f === 4
+                ? "bg-yellow-200 text-yellow-800 dark:bg-yellow-900/60 dark:text-yellow-300"
+                : "bg-muted text-muted-foreground"
+            )}
+          >
+            {f} PF
+          </span>
+        </button>
+      );
+    };
 
     return (
       <div className="rounded-xl border bg-card p-2 flex flex-col gap-2 min-h-0 min-w-0">
-        <div className="flex items-center justify-between px-1 shrink-0">
+        <div className="flex items-center justify-between gap-2 px-1 shrink-0">
           <span className="text-sm font-bold truncate">{team.name}</span>
+          <span
+            title="Players marked as having played this game"
+            className="shrink-0 text-[10px] font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-950/50 rounded px-1.5 py-0.5 whitespace-nowrap"
+          >
+            {playedCount} played
+          </span>
         </div>
 
         {/* Team fouls + timeouts */}
@@ -692,206 +909,271 @@ export function ScorekeeperBoard({ initialGame }: Props) {
           </div>
         </div>
 
-        {/* Roster — 2-column grid, scrolls internally if it overflows */}
+        {/* Roster — on-court entries only; bench + subs managed via Manage Team */}
         <div className="grid grid-cols-2 gap-1 content-start overflow-y-auto min-h-0 flex-1">
-          {team.players.map((player) => {
-            const stats = playerStats[player.id];
+          {activePlayers.length === 0 && activeSubs.length === 0 && (
+            <p className="col-span-2 text-[11px] text-muted-foreground text-center py-3">
+              No one on court — tap Manage Team below.
+            </p>
+          )}
+
+          {activePlayers.map((player) => {
             const isSelected = selectedEntry?.type === "player" && selectedEntry.id === player.id;
-            const playerFouls = stats?.fouls ?? 0;
-            return (
+            return courtCard({
+              key: player.id,
+              selected: isSelected,
+              onSelect: () => {
+                setSelectedTeamId(team.id);
+                setSelectedEntry(isSelected ? null : { type: "player", id: player.id });
+              },
+              jerseyNumber: player.jerseyNumber,
+              name: player.displayName,
+              isSub: false,
+              stats: playerStats[player.id],
+            });
+          })}
+
+          {activeSubs.map((sub) => {
+            const isSelected = selectedEntry?.type === "sub" && selectedEntry.statsId === sub.statsId;
+            return courtCard({
+              key: sub.statsId,
+              selected: isSelected,
+              onSelect: () => {
+                setSelectedTeamId(team.id);
+                setSelectedEntry(isSelected ? null : { type: "sub", statsId: sub.statsId });
+              },
+              jerseyNumber: sub.jerseyNumber,
+              name: sub.displayName,
+              isSub: true,
+              stats: subStats[sub.statsId],
+            });
+          })}
+
+          <button
+            onClick={() => openManageTeam(team.id)}
+            className="col-span-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border border-dashed transition-colors flex items-center justify-center gap-1.5"
+          >
+            <UserPlus className="w-3 h-3" />
+            Manage Team
+            {benchCount > 0 && (
+              <span className="text-[10px] font-bold bg-muted text-muted-foreground rounded px-1.5 py-0.5">
+                {benchCount} on bench
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderManageModal() {
+    if (!manageTeamId) return null;
+    const team = game.homeTeam.id === manageTeamId ? game.homeTeam : game.awayTeam;
+    const subs = substitutes[team.id] ?? [];
+
+    type Row =
+      | { kind: "player"; id: string; jerseyNumber: string | null; name: string; stats?: PlayerStat }
+      | { kind: "sub"; statsId: string; jerseyNumber: string | null; name: string; stats?: PlayerStat };
+
+    const rows: Row[] = [
+      ...team.players.map(
+        (p): Row => ({ kind: "player", id: p.id, jerseyNumber: p.jerseyNumber, name: p.displayName, stats: playerStats[p.id] })
+      ),
+      ...subs.map(
+        (s): Row => ({ kind: "sub", statsId: s.statsId, jerseyNumber: s.jerseyNumber, name: s.displayName, stats: subStats[s.statsId] })
+      ),
+    ];
+    const keyOf = (r: Row) => (r.kind === "player" ? r.id : subKey(r.statsId));
+    const courtRows = rows.filter((r) => !isBenched(keyOf(r)));
+    const benchRows = rows.filter((r) => isBenched(keyOf(r)));
+
+    const renderRow = (r: Row) => {
+      const key = keyOf(r);
+      const benched = isBenched(key);
+      const stats = r.stats;
+      const isEditingSub = r.kind === "sub" && editingSubStatsId === r.statsId;
+      const played = r.kind === "sub" ? true : playerPlayed(r.id);
+      const locked = r.kind === "sub" ? true : hasStats(stats);
+      return (
+        <div key={key} className="rounded-lg border bg-muted/40 px-2 py-1.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium truncate">
+                {r.jerseyNumber !== null && <span className="font-bold">#{r.jerseyNumber} </span>}
+                {r.name}
+                {r.kind === "sub" && <span className="ml-1 text-muted-foreground">(sub)</span>}
+              </div>
+              <div className="text-[10px] text-muted-foreground tabular-nums">
+                {stats
+                  ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A · ${stats.fouls}PF`
+                  : "0P · 0R · 0A · 0PF"}
+              </div>
+            </div>
+
+            {/* Attendance — rostered players toggle gamePlayed; subs are always played */}
+            {r.kind === "sub" ? (
+              <span className="shrink-0 text-[9px] font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-950/50 rounded px-1.5 py-0.5 uppercase tracking-wide">
+                played
+              </span>
+            ) : played ? (
               <button
-                key={player.id}
-                onClick={() => {
-                  setSelectedTeamId(team.id);
-                  setSelectedEntry(isSelected ? null : { type: "player", id: player.id });
-                }}
-                className={cn(
-                  "flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-left transition-colors min-w-0",
-                  isSelected
-                    ? "bg-primary text-primary-foreground ring-2 ring-primary"
-                    : playerFouls >= 5
-                    ? "bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-foreground"
-                    : playerFouls === 4
-                    ? "bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-foreground"
-                    : "bg-muted/50 hover:bg-muted text-foreground"
-                )}
+                onClick={() => toggleAttendance(team.id, r.id)}
+                disabled={locked || attendanceLoading === r.id}
+                title={locked ? "Recorded stats — counted as played" : "Tap to mark absent"}
+                className="shrink-0 inline-flex items-center gap-1 text-[9px] font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-950/50 rounded px-1.5 py-1 uppercase tracking-wide disabled:cursor-default enabled:hover:bg-green-200 enabled:cursor-pointer"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium truncate">
-                    {player.jerseyNumber !== null && <span className="font-bold">#{player.jerseyNumber} </span>}
-                    {player.displayName}
-                  </div>
-                  <div className={cn("text-[10px] font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
-                    {stats ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A` : "0P · 0R · 0A"}
-                  </div>
-                </div>
-                <span
+                <Check className="w-2.5 h-2.5" /> played
+              </button>
+            ) : (
+              <button
+                onClick={() => toggleAttendance(team.id, r.id)}
+                disabled={attendanceLoading === r.id}
+                className="shrink-0 text-[10px] font-bold text-muted-foreground border rounded px-2 py-1 hover:bg-muted hover:text-foreground disabled:opacity-50 transition-colors"
+              >
+                Mark present
+              </button>
+            )}
+
+            {/* Court / bench move */}
+            <button
+              onClick={() => setEntryBenched(key, !benched)}
+              className={cn(
+                "shrink-0 text-[11px] font-bold rounded px-2 py-1 border transition-colors",
+                benched
+                  ? "border-primary text-primary hover:bg-primary/10"
+                  : "border-muted-foreground/40 text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              {benched ? "→ Court" : "Bench →"}
+            </button>
+
+            {/* Sub edit / delete */}
+            {r.kind === "sub" && (
+              <div className="shrink-0 flex items-center gap-0.5">
+                <button
+                  onClick={() =>
+                    isEditingSub
+                      ? handleCancelEditSub()
+                      : handleStartEditSub({ statsId: r.statsId, displayName: r.name, jerseyNumber: r.jerseyNumber })
+                  }
+                  title="Edit substitute"
                   className={cn(
-                    "shrink-0 text-[9px] font-bold rounded px-1 py-0.5 tabular-nums whitespace-nowrap",
-                    isSelected
-                      ? "bg-primary-foreground/20"
-                      : playerFouls >= 5
-                      ? "bg-red-200 text-red-800 dark:bg-red-900/60 dark:text-red-300"
-                      : playerFouls === 4
-                      ? "bg-yellow-200 text-yellow-800 dark:bg-yellow-900/60 dark:text-yellow-300"
-                      : "bg-muted text-muted-foreground"
+                    "p-1 rounded transition-colors",
+                    isEditingSub ? "text-foreground bg-muted" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   )}
                 >
-                  {playerFouls} PF
-                </span>
-              </button>
-            );
-          })}
-
-          {subs.map((sub) => {
-            const stats = subStats[sub.statsId];
-            const isSelected = selectedEntry?.type === "sub" && selectedEntry.statsId === sub.statsId;
-            const isEditing = editingSubStatsId === sub.statsId;
-            const subFouls = stats?.fouls ?? 0;
-            return (
-              <div key={sub.statsId} className={cn("flex flex-col gap-0.5 min-w-0", isEditing && "col-span-2")}>
-                <div className="flex items-stretch gap-0.5 min-w-0">
-                  <button
-                    onClick={() => {
-                      setSelectedTeamId(team.id);
-                      setSelectedEntry(isSelected ? null : { type: "sub", statsId: sub.statsId });
-                    }}
-                    className={cn(
-                      "flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-left transition-colors min-w-0",
-                      isSelected
-                        ? "bg-primary text-primary-foreground ring-2 ring-primary"
-                        : subFouls >= 5
-                        ? "bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-foreground"
-                        : subFouls === 4
-                        ? "bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-foreground"
-                        : "bg-muted/50 hover:bg-muted text-foreground"
-                    )}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium truncate">
-                        {sub.jerseyNumber !== null && <span className="font-bold">#{sub.jerseyNumber} </span>}
-                        {sub.displayName}
-                        <span className={cn("ml-1", isSelected ? "opacity-60" : "text-muted-foreground")}>(sub)</span>
-                      </div>
-                      <div className={cn("text-[10px] font-normal tabular-nums", isSelected ? "opacity-75" : "opacity-50")}>
-                        {stats ? `${stats.points}P · ${stats.rebounds}R · ${stats.assists}A` : "0P · 0R · 0A"}
-                      </div>
-                    </div>
-                    <span
-                      className={cn(
-                        "shrink-0 text-[9px] font-bold rounded px-1 py-0.5 tabular-nums whitespace-nowrap",
-                        isSelected
-                          ? "bg-primary-foreground/20"
-                          : subFouls >= 5
-                          ? "bg-red-200 text-red-800 dark:bg-red-900/60 dark:text-red-300"
-                          : subFouls === 4
-                          ? "bg-yellow-200 text-yellow-800 dark:bg-yellow-900/60 dark:text-yellow-300"
-                          : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {subFouls} PF
-                    </span>
-                  </button>
-                  <div className="flex flex-col gap-0.5 shrink-0">
-                    <button
-                      onClick={() => (isEditing ? handleCancelEditSub() : handleStartEditSub(sub))}
-                      className={cn(
-                        "flex-1 px-1 rounded transition-colors flex items-center justify-center",
-                        isEditing
-                          ? "text-foreground bg-muted"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                      )}
-                      title="Edit substitute"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteSub(sub.statsId, team.id)}
-                      className="flex-1 px-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors flex items-center justify-center"
-                      title="Remove substitute"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-                {isEditing && (
-                  <div className="flex gap-1 px-0.5">
-                    <input
-                      type="text"
-                      placeholder="Name *"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSaveEditSub(team.id)}
-                      className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                      autoFocus
-                    />
-                    <input
-                      type="text"
-                      placeholder="#"
-                      value={editJersey}
-                      onChange={(e) => setEditJersey(e.target.value)}
-                      className="w-12 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                    <button
-                      onClick={() => handleSaveEditSub(team.id)}
-                      disabled={!editName.trim() || savingEdit}
-                      className="px-2 py-1.5 bg-primary text-primary-foreground text-xs rounded font-medium disabled:opacity-50"
-                    >
-                      {savingEdit ? "…" : "Save"}
-                    </button>
-                    <button
-                      onClick={handleCancelEditSub}
-                      className="p-1.5 border rounded hover:bg-muted text-muted-foreground"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => handleDeleteSub(r.statsId, team.id)}
+                  title="Remove substitute"
+                  className="p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
               </div>
-            );
-          })}
+            )}
+          </div>
 
-          {isAddingSubHere ? (
-            <div className="col-span-2 flex gap-1 rounded-lg border bg-muted/40 p-1.5">
+          {isEditingSub && (
+            <div className="flex gap-1 mt-1.5">
               <input
                 type="text"
                 placeholder="Name *"
-                value={subName}
-                onChange={(e) => setSubName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddSub()}
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveEditSub(team.id)}
                 className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                 autoFocus
               />
               <input
                 type="text"
                 placeholder="#"
-                value={subJersey}
-                onChange={(e) => setSubJersey(e.target.value)}
+                value={editJersey}
+                onChange={(e) => setEditJersey(e.target.value)}
                 className="w-12 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <button
-                onClick={handleAddSub}
-                disabled={!subName.trim() || addingSub}
-                className="px-2.5 py-1.5 bg-primary text-primary-foreground text-xs rounded font-medium disabled:opacity-50"
+                onClick={() => handleSaveEditSub(team.id)}
+                disabled={!editName.trim() || savingEdit}
+                className="px-2 py-1.5 bg-primary text-primary-foreground text-xs rounded font-medium disabled:opacity-50"
               >
-                {addingSub ? "…" : "Add"}
+                {savingEdit ? "…" : "Save"}
               </button>
-              <button
-                onClick={handleCancelAddSub}
-                className="p-1.5 border rounded hover:bg-muted text-muted-foreground"
-              >
+              <button onClick={handleCancelEditSub} className="p-1.5 border rounded hover:bg-muted text-muted-foreground">
                 <X className="w-3 h-3" />
               </button>
             </div>
-          ) : (
-            <button
-              onClick={() => setShowAddSubTeamId(team.id)}
-              className="col-span-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border border-dashed transition-colors flex items-center justify-center gap-1"
-            >
-              <UserPlus className="w-3 h-3" />
-              Add Sub
-            </button>
           )}
+        </div>
+      );
+    };
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={closeManageTeam}>
+        <div
+          className="w-full max-w-2xl rounded-xl border bg-card shadow-xl max-h-[85vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-2 border-b px-4 py-3 shrink-0">
+            <div className="min-w-0">
+              <h3 className="text-base font-bold truncate">{team.name} — Manage Team</h3>
+              <p className="text-[11px] text-muted-foreground">Move players on/off court and mark who played.</p>
+            </div>
+            <button onClick={closeManageTeam} className="p-1.5 rounded border hover:bg-muted text-muted-foreground shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="p-4 overflow-y-auto grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">On Court · {courtRows.length}</p>
+              {courtRows.length ? courtRows.map(renderRow) : <p className="text-xs text-muted-foreground py-2">No one on court.</p>}
+            </div>
+            <div className="flex flex-col gap-1.5 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Bench · {benchRows.length}</p>
+              {benchRows.length ? benchRows.map(renderRow) : <p className="text-xs text-muted-foreground py-2">No one on the bench.</p>}
+
+              {showAddSubForm ? (
+                <div className="flex gap-1 rounded-lg border bg-muted/40 p-1.5 mt-1">
+                  <input
+                    type="text"
+                    placeholder="Name *"
+                    value={subName}
+                    onChange={(e) => setSubName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddSub()}
+                    className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    autoFocus
+                  />
+                  <input
+                    type="text"
+                    placeholder="#"
+                    value={subJersey}
+                    onChange={(e) => setSubJersey(e.target.value)}
+                    className="w-12 px-2 py-1.5 text-xs rounded border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <button
+                    onClick={handleAddSub}
+                    disabled={!subName.trim() || addingSub}
+                    className="px-2.5 py-1.5 bg-primary text-primary-foreground text-xs rounded font-medium disabled:opacity-50"
+                  >
+                    {addingSub ? "…" : "Add"}
+                  </button>
+                  <button onClick={handleCancelAddSub} className="p-1.5 border rounded hover:bg-muted text-muted-foreground">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAddSubForm(true)}
+                  className="mt-1 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border border-dashed transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <UserPlus className="w-3 h-3" />
+                  Add New Sub
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -899,6 +1181,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
 
   return (
     <div className="flex flex-col gap-2 lg:flex-1 lg:min-h-0">
+      {renderManageModal()}
       {/* Top bar: scorekeeper, period, game controls */}
       <div className="rounded-xl border bg-card px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-2 shrink-0">
         <div className="flex items-center gap-2 flex-1 min-w-[220px]">
@@ -1085,12 +1368,12 @@ export function ScorekeeperBoard({ initialGame }: Props) {
               </span>
             </div>
             <button
-              onClick={handleUndo}
-              disabled={!lastEvent || loading}
+              onClick={handleUndoSelected}
+              disabled={selectedLogIds.size === 0 || undoing}
               className="px-2.5 py-1 border rounded-lg text-xs font-semibold hover:bg-muted flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed text-muted-foreground hover:text-foreground transition-colors"
             >
               <RotateCcw className="w-3 h-3" />
-              Undo last
+              {selectedLogIds.size > 0 ? `Undo Selected (${selectedLogIds.size})` : "Undo Selected"}
             </button>
           </div>
         </div>
@@ -1118,8 +1401,23 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                   : entry.eventType === "ASSIST"
                   ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
                   : "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400";
+              const isChecked = selectedLogIds.has(entry.id);
               return (
-                <div key={entry.id} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-muted/40 text-xs shrink-0">
+                <div
+                  key={entry.id}
+                  className={cn(
+                    "flex items-center gap-2 px-2 py-1 rounded-lg text-xs shrink-0",
+                    isChecked ? "bg-primary/10 ring-1 ring-primary/40" : "bg-muted/40"
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggleLogSelect(entry.id)}
+                    disabled={undoing}
+                    className="shrink-0 w-3.5 h-3.5 accent-primary cursor-pointer disabled:cursor-not-allowed"
+                    aria-label="Select to undo"
+                  />
                   <span className={cn("shrink-0 px-1.5 py-0.5 rounded font-bold tabular-nums", badgeCls)}>
                     {label}
                   </span>
@@ -1130,6 +1428,13 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                   <span className="text-muted-foreground shrink-0">·</span>
                   <span className="text-muted-foreground truncate">{entry.teamName}</span>
                   <span className="text-muted-foreground shrink-0 ml-auto">{entry.quarter === 1 ? "1H" : "2H"}</span>
+                  <button
+                    onClick={() => undoEntries([entry])}
+                    disabled={undoing}
+                    className="shrink-0 px-1.5 py-0.5 border rounded text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Undo
+                  </button>
                 </div>
               );
             })

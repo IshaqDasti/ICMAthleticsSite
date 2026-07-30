@@ -15,6 +15,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
         rebounds: true,
         assists: true,
         fouls: true,
+        gamePlayed: true,
         substituteName: true,
         substituteJersey: true,
       },
