@@ -102,6 +102,16 @@ export function ScorekeeperBoard({ initialGame }: Props) {
   const [editJersey, setEditJersey] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
+  // Technical fouls: a live courtside counter only (chosen scope — NOT stored in box
+  // scores or career stats, no schema change). A technical is recorded as a normal FOUL
+  // event so it counts toward the player's personal fouls AND the team foul total; we
+  // additionally remember which of those foul events were technicals, per game, in
+  // localStorage. `counts` drives the on-card "T" badge; `eventIds` maps each technical's
+  // FOUL event id back to its player/sub key so undoing that foul decrements the counter.
+  const [tech, setTech] = useState<{ counts: Record<string, number>; eventIds: Record<string, string> }>({
+    counts: {},
+    eventIds: {},
+  });
 
   const selectedTeam = game.homeTeam.id === selectedTeamId ? game.homeTeam : game.awayTeam;
 
@@ -125,8 +135,12 @@ export function ScorekeeperBoard({ initialGame }: Props) {
   // persisted per game in localStorage. Default: everyone on court. We store the BENCHED
   // set, so newly added players/subs default to on court automatically.
   const courtStorageKey = `icm-bench-${game.id}`;
+  const techStorageKey = `icm-tech-${game.id}`;
   const subKey = (statsId: string) => `sub:${statsId}`;
   const isBenched = (key: string) => benchedIds.has(key);
+  // localStorage/counter key for an entry (rostered player id or `sub:<statsId>`).
+  const techKey = (entry: SelectedEntry) =>
+    entry ? (entry.type === "player" ? entry.id : subKey(entry.statsId)) : null;
 
   // "Played" = server-owned attendance (gamePlayed) OR any recorded stat (covers the
   // optimistic window before a refetch). Independent of court/bench.
@@ -147,6 +161,21 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.id]);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(techStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { counts?: Record<string, number>; eventIds?: Record<string, string> };
+        setTech({ counts: parsed.counts ?? {}, eventIds: parsed.eventIds ?? {} });
+      } else {
+        setTech({ counts: {}, eventIds: {} });
+      }
+    } catch {
+      /* ignore malformed / unavailable storage */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id]);
+
   const persistBench = useCallback(
     (next: Set<string>) => {
       try {
@@ -156,6 +185,17 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       }
     },
     [courtStorageKey]
+  );
+
+  const persistTech = useCallback(
+    (next: { counts: Record<string, number>; eventIds: Record<string, string> }) => {
+      try {
+        localStorage.setItem(techStorageKey, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+    },
+    [techStorageKey]
   );
 
   const fetchStats = useCallback(async () => {
@@ -380,7 +420,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     }
   }
 
-  async function handleStatEvent(type: EventType, value: number) {
+  async function handleStatEvent(type: EventType, value: number, opts?: { technical?: boolean }) {
     if (!selectedEntry) {
       toast.warning("Select a player first");
       return;
@@ -502,6 +542,20 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         { id: data.event.id, eventType: type, playerName, jerseyNumber, teamId: selectedTeamId, teamName: selectedTeam.name, quarter: game.currentQuarter, value },
         ...prev,
       ]);
+      // Flag this FOUL event as a technical (courtside counter only — see `tech` state).
+      if (opts?.technical) {
+        const key = techKey(selectedEntry);
+        if (key) {
+          setTech((prev) => {
+            const next = {
+              counts: { ...prev.counts, [key]: (prev.counts[key] ?? 0) + 1 },
+              eventIds: { ...prev.eventIds, [data.event.id]: key },
+            };
+            persistTech(next);
+            return next;
+          });
+        }
+      }
     }
   }
 
@@ -525,6 +579,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       let homeDelta = 0;
       let awayDelta = 0;
       let failures = 0;
+      const undoneTechEventIds: string[] = [];
       for (const entry of entries) {
         const res = await fetch(`/api/games/${game.id}/events/${entry.id}`, { method: "DELETE" });
         if (!res.ok) {
@@ -535,9 +590,24 @@ export function ScorekeeperBoard({ initialGame }: Props) {
           if (entry.teamId === game.homeTeam.id) homeDelta -= entry.value;
           else awayDelta -= entry.value;
         }
+        if (tech.eventIds[entry.id]) undoneTechEventIds.push(entry.id);
       }
       if (homeDelta !== 0 || awayDelta !== 0) {
         setGame((prev) => ({ ...prev, homeScore: prev.homeScore + homeDelta, awayScore: prev.awayScore + awayDelta }));
+      }
+      if (undoneTechEventIds.length > 0) {
+        setTech((prev) => {
+          const counts = { ...prev.counts };
+          const eventIds = { ...prev.eventIds };
+          for (const id of undoneTechEventIds) {
+            const key = eventIds[id];
+            if (key) counts[key] = Math.max(0, (counts[key] ?? 0) - 1);
+            delete eventIds[id];
+          }
+          const next = { counts, eventIds };
+          persistTech(next);
+          return next;
+        });
       }
       setSelectedEntry(null);
       setSelectedLogIds(new Set());
@@ -549,7 +619,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         toast.success(entries.length > 1 ? `${entries.length} actions undone` : "Action undone");
       }
     },
-    [undoing, game.id, game.homeTeam.id, fetchStats]
+    [undoing, game.id, game.homeTeam.id, fetchStats, tech.eventIds, persistTech]
   );
 
   function handleUndoSelected() {
@@ -762,6 +832,16 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       persistBench(next);
       return next;
     });
+    setTech((prev) => {
+      const key = subKey(statsId);
+      if (!(key in prev.counts) && !Object.values(prev.eventIds).includes(key)) return prev;
+      const counts = { ...prev.counts };
+      delete counts[key];
+      const eventIds = Object.fromEntries(Object.entries(prev.eventIds).filter(([, v]) => v !== key));
+      const next = { counts, eventIds };
+      persistTech(next);
+      return next;
+    });
 
     toast.success("Substitute removed");
   }
@@ -786,6 +866,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       name: string;
       isSub: boolean;
       stats?: PlayerStat;
+      techCount?: number;
     }) => {
       const f = opts.stats?.fouls ?? 0;
       return (
@@ -829,6 +910,19 @@ export function ScorekeeperBoard({ initialGame }: Props) {
           >
             {f} PF
           </span>
+          {(opts.techCount ?? 0) > 0 && (
+            <span
+              title="Technical fouls"
+              className={cn(
+                "shrink-0 text-[9px] font-bold rounded px-1 py-0.5 tabular-nums whitespace-nowrap",
+                opts.selected
+                  ? "bg-primary-foreground/20"
+                  : "bg-purple-200 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300"
+              )}
+            >
+              {opts.techCount}T
+            </span>
+          )}
         </button>
       );
     };
@@ -930,6 +1024,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
               name: player.displayName,
               isSub: false,
               stats: playerStats[player.id],
+              techCount: tech.counts[player.id],
             });
           })}
 
@@ -946,6 +1041,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
               name: sub.displayName,
               isSub: true,
               stats: subStats[sub.statsId],
+              techCount: tech.counts[subKey(sub.statsId)],
             });
           })}
 
@@ -1325,6 +1421,14 @@ export function ScorekeeperBoard({ initialGame }: Props) {
           >
             +1 FOUL
           </button>
+          <button
+            onClick={() => handleStatEvent("FOUL", 1, { technical: true })}
+            disabled={!canRecord}
+            title="Technical foul — also counts as a personal and team foul"
+            className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+          >
+            +1 TECH
+          </button>
 
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-center">Deduct</p>
           <div className="grid grid-cols-2 gap-1">
@@ -1385,6 +1489,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
               const isPositive = entry.value >= 0;
               const abs = Math.abs(entry.value);
               const sign = isPositive ? "+" : "−";
+              const isTech = entry.eventType === "FOUL" && tech.eventIds[entry.id] !== undefined;
               const label =
                 entry.eventType === "POINT"
                   ? `${sign}${abs} ${abs === 1 ? "PT" : "PTS"}`
@@ -1392,6 +1497,8 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                   ? `${sign}${abs} REB`
                   : entry.eventType === "ASSIST"
                   ? `${sign}${abs} AST`
+                  : isTech
+                  ? `${sign}${abs} TECH`
                   : `${sign}${abs} FOUL`;
               const badgeCls =
                 entry.eventType === "POINT"
@@ -1400,6 +1507,8 @@ export function ScorekeeperBoard({ initialGame }: Props) {
                   ? "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400"
                   : entry.eventType === "ASSIST"
                   ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                  : isTech
+                  ? "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-400"
                   : "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400";
               const isChecked = selectedLogIds.has(entry.id);
               return (
