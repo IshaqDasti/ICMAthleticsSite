@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { RotateCcw, ChevronRight, CheckCircle, UserPlus, X, Trash2, Pencil, Check } from "lucide-react";
+import { RotateCcw, ChevronRight, ChevronDown, ChevronUp, CheckCircle, UserPlus, X, Trash2, Pencil, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { periodLabel } from "@/lib/utils/period";
 
@@ -103,6 +103,7 @@ export function ScorekeeperBoard({ initialGame }: Props) {
   const [editJersey, setEditJersey] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
+  const [logExpanded, setLogExpanded] = useState(false);
   // Technical fouls: a live courtside counter only (chosen scope — NOT stored in box
   // scores or career stats, no schema change). A technical is recorded as a normal FOUL
   // event so it counts toward the player's personal fouls AND the team foul total; we
@@ -1472,7 +1473,12 @@ export function ScorekeeperBoard({ initialGame }: Props) {
       </div>
 
       {/* Activity log */}
-      <div className="rounded-xl border bg-card px-3 py-2 shrink-0 flex flex-col lg:h-32">
+      <div
+        className={cn(
+          "rounded-xl border bg-card px-3 py-2 shrink-0 flex flex-col",
+          logExpanded ? "lg:h-96" : "lg:h-32"
+        )}
+      >
         <div className="flex items-center justify-between gap-2 shrink-0">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Activity Log</p>
           <div className="flex items-center gap-3">
@@ -1485,6 +1491,14 @@ export function ScorekeeperBoard({ initialGame }: Props) {
               </span>
             </div>
             <button
+              onClick={() => setLogExpanded((v) => !v)}
+              aria-expanded={logExpanded}
+              className="px-2.5 py-1 border rounded-lg text-xs font-semibold hover:bg-muted flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {logExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              {logExpanded ? "Collapse" : "Expand"}
+            </button>
+            <button
               onClick={handleUndoSelected}
               disabled={selectedLogIds.size === 0 || undoing}
               className="px-2.5 py-1 border rounded-lg text-xs font-semibold hover:bg-muted flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed text-muted-foreground hover:text-foreground transition-colors"
@@ -1494,7 +1508,12 @@ export function ScorekeeperBoard({ initialGame }: Props) {
             </button>
           </div>
         </div>
-        <div className="flex flex-col gap-1 mt-1.5 overflow-y-auto flex-1 max-h-40 lg:max-h-none">
+        <div
+          className={cn(
+            "flex flex-col gap-1 mt-1.5 overflow-y-auto flex-1 lg:max-h-none",
+            logExpanded ? "max-h-[32rem]" : "max-h-40"
+          )}
+        >
           {activityLog.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-3">No events recorded yet</p>
           ) : (
