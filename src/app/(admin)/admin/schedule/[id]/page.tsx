@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
 import { Trash2, RotateCcw } from "lucide-react";
+import { utcToEtDateTimeLocal } from "@/lib/utils/dates";
 
 export default function EditGamePage() {
   const router = useRouter();
@@ -28,9 +29,7 @@ export default function EditGamePage() {
     ]).then(([{ game }, { teams: t }, { seasons: s }]) => {
       setTeams(t);
       setSeasons(s);
-      const scheduled = game.scheduledAt
-        ? new Date(game.scheduledAt).toISOString().slice(0, 16)
-        : "";
+      const scheduled = utcToEtDateTimeLocal(game.scheduledAt);
       setGameStatus(game.status ?? "SCHEDULED");
       setForm({
         seasonId: game.seasonId ?? "",

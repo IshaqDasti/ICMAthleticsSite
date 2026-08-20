@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { withAuth } from "@/lib/auth/withAuth";
+import { etDateTimeLocalToUTC } from "@/lib/utils/dates";
 import { GameStatus } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
@@ -44,7 +45,7 @@ export const POST = withAuth(async (req) => {
       weekNumber: body.weekNumber,
       gameNumber: body.gameNumber,
       gameType: body.gameType ?? "REGULAR_SEASON",
-      scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : undefined,
+      scheduledAt: body.scheduledAt ? etDateTimeLocalToUTC(body.scheduledAt) : undefined,
       location: body.location,
       notes: body.notes,
     },

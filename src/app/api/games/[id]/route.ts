@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { withAuth } from "@/lib/auth/withAuth";
+import { etDateTimeLocalToUTC } from "@/lib/utils/dates";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const game = await prisma.game.findUnique({
@@ -27,7 +28,7 @@ export const PUT = withAuth(async (req, _user, { params }) => {
       ...(body.status && { status: body.status }),
       ...(body.homeTeamId && { homeTeamId: body.homeTeamId }),
       ...(body.awayTeamId && { awayTeamId: body.awayTeamId }),
-      ...(body.scheduledAt !== undefined && { scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null }),
+      ...(body.scheduledAt !== undefined && { scheduledAt: body.scheduledAt ? etDateTimeLocalToUTC(body.scheduledAt) : null }),
       ...(body.location !== undefined && { location: body.location }),
       ...(body.notes !== undefined && { notes: body.notes }),
       ...(body.scorekeeperName !== undefined && { scorekeeperName: body.scorekeeperName }),
