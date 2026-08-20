@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { RotateCcw, ChevronRight, CheckCircle, UserPlus, X, Trash2, Pencil, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { periodLabel } from "@/lib/utils/period";
 
 interface Team {
   id: string;
@@ -361,16 +362,19 @@ export function ScorekeeperBoard({ initialGame }: Props) {
     setIsEnding(false);
   }
 
-  async function handleStartSecondHalf() {
+  async function handleStartPeriod(nextQuarter: number) {
+    // Overtime (period 3+) is consequential and hard to undo, so confirm it.
+    if (nextQuarter >= 3 && !confirm(`Start ${periodLabel(nextQuarter)}? Team fouls and timeouts will reset.`)) return;
     const res = await fetch(`/api/games/${game.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentQuarter: 2 }),
+      body: JSON.stringify({ currentQuarter: nextQuarter }),
     });
     if (!res.ok) {
-      toast.error("Failed to start 2nd half");
+      toast.error(`Failed to start ${periodLabel(nextQuarter)}`);
     } else {
-      setGame((prev) => ({ ...prev, currentQuarter: 2, homeTeamFouls: 0, awayTeamFouls: 0, homeTeamTimeouts: 0, awayTeamTimeouts: 0 }));
+      setGame((prev) => ({ ...prev, currentQuarter: nextQuarter, homeTeamFouls: 0, awayTeamFouls: 0, homeTeamTimeouts: 0, awayTeamTimeouts: 0 }));
+      toast.success(`${periodLabel(nextQuarter)} started`);
     }
   }
 
@@ -1303,15 +1307,24 @@ export function ScorekeeperBoard({ initialGame }: Props) {
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Period</span>
           <span className="text-sm font-black whitespace-nowrap">
-            {game.currentQuarter === 1 ? "1st Half" : "2nd Half"}
+            {periodLabel(game.currentQuarter)}
           </span>
           {game.isLive && game.currentQuarter === 1 && (
             <button
-              onClick={handleStartSecondHalf}
+              onClick={() => handleStartPeriod(2)}
               className="px-2.5 py-1.5 border rounded-lg text-xs font-medium hover:bg-muted flex items-center gap-1 whitespace-nowrap"
             >
               <ChevronRight className="w-3.5 h-3.5" />
               Start 2nd Half
+            </button>
+          )}
+          {game.isLive && game.currentQuarter >= 2 && game.homeScore === game.awayScore && (
+            <button
+              onClick={() => handleStartPeriod(game.currentQuarter + 1)}
+              className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 whitespace-nowrap"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+              Start {periodLabel(game.currentQuarter + 1)}
             </button>
           )}
         </div>

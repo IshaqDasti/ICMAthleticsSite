@@ -32,12 +32,13 @@ export const PUT = withAuth(async (req, _user, { params }) => {
       ...(body.notes !== undefined && { notes: body.notes }),
       ...(body.scorekeeperName !== undefined && { scorekeeperName: body.scorekeeperName }),
       ...(body.currentQuarter !== undefined && { currentQuarter: body.currentQuarter }),
-      // Reset team fouls and timeouts when starting 2nd half
-      ...(body.currentQuarter === 2 && { homeTeamFouls: 0, awayTeamFouls: 0, homeTeamTimeouts: 0, awayTeamTimeouts: 0 }),
-      ...(body.homeTeamTimeouts !== undefined && body.currentQuarter !== 2 && { homeTeamTimeouts: body.homeTeamTimeouts }),
-      ...(body.awayTeamTimeouts !== undefined && body.currentQuarter !== 2 && { awayTeamTimeouts: body.awayTeamTimeouts }),
-      ...(body.homeTeamFouls !== undefined && body.currentQuarter !== 2 && { homeTeamFouls: body.homeTeamFouls }),
-      ...(body.awayTeamFouls !== undefined && body.currentQuarter !== 2 && { awayTeamFouls: body.awayTeamFouls }),
+      // Reset team fouls and timeouts when starting a new period (2nd half or any overtime).
+      ...(body.currentQuarter !== undefined && body.currentQuarter >= 2 && { homeTeamFouls: 0, awayTeamFouls: 0, homeTeamTimeouts: 0, awayTeamTimeouts: 0 }),
+      // Absolute foul/timeout writes only apply when this PUT is not a period change.
+      ...(body.homeTeamTimeouts !== undefined && body.currentQuarter === undefined && { homeTeamTimeouts: body.homeTeamTimeouts }),
+      ...(body.awayTeamTimeouts !== undefined && body.currentQuarter === undefined && { awayTeamTimeouts: body.awayTeamTimeouts }),
+      ...(body.homeTeamFouls !== undefined && body.currentQuarter === undefined && { homeTeamFouls: body.homeTeamFouls }),
+      ...(body.awayTeamFouls !== undefined && body.currentQuarter === undefined && { awayTeamFouls: body.awayTeamFouls }),
     },
   });
   return NextResponse.json({ game });
